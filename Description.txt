@@ -1,0 +1,19 @@
+Title: Validation_vs_Testing_Dataset_App
+ShortName: Validation vs Test
+Date: 2020-11-25
+Lifecycle: experimental
+Authors@R: c(
+    person(given = "Ethan", family = "Wright", email = "ejw36@psu.edu", role = c("aut", "cre"))
+  )
+Chapter: Data Science
+Description: This app was created in order to teach students about how to decide on what percent of data should be dedicated to training vs percent dedicated to the validation set. 
+LearningObjectives: c(
+    "The student will learn to balance the training set and validation set.",
+    "The student will learn to see the effects the presense of outliers and number of observations."
+  )
+DisplayMode: Normal
+URL: https://psu-eberly.shinyapps.io/Sample_App
+BugReports: https://github.com/EducationShinyAppTeam/Sample_App/issues
+License: CC-BY-NC-SA-4.0
+Tags: simulation
+Type: Shiny
