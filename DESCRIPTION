@@ -12,8 +12,8 @@ LearningObjectives: c(
     "The student will learn to see the effects the presense of outliers and number of observations."
   )
 DisplayMode: Normal
-URL: https://psu-eberly.shinyapps.io/Sample_App
-BugReports: https://github.com/EducationShinyAppTeam/Sample_App/issues
+URL: https://psu-eberly.shinyapps.io/Validation_vs_Testing_Dataset_App
+BugReports: https://github.com/EducationShinyAppTeam/Validation_vs_Testing_Dataset_App/issues
 License: CC-BY-NC-SA-4.0
-Tags: simulation
+Tags: simulation, real data
 Type: Shiny

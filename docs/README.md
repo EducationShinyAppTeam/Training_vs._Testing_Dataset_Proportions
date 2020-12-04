@@ -1,4 +1,4 @@
-# Validation_vs_Testing_Dataset_App
+# Validation vs Testing Dataset
 
 ![experimental](https://img.shields.io/badge/lifecycle-experimental-orange)
 ![year](https://img.shields.io/badge/year-2020-lightgrey)
@@ -6,4 +6,4 @@
 
 ![App Screenshot](/docs/screenshot.png)
 
-APP_DESCRIPTION
+This app was created in order to teach students about how to decide on what percent of data should be dedicated to training vs percent dedicated to the validation set.
