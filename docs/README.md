@@ -1,4 +1,4 @@
-# Validation_vs_Testing_Dataset_App
+# Training_vs_Testing_Dataset_App
 
 ![experimental](https://img.shields.io/badge/lifecycle-experimental-orange)
 ![year](https://img.shields.io/badge/year-2020-lightgrey)

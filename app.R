@@ -33,7 +33,7 @@ APP_DESCP  <<- paste(
   "use multiple lines to keep the description legible."
 )
 # End App Meta Data------------------------------------------------------------
-
+scaleFUN <- function(x) sprintf("%.1f", x)
 
 {
 # Define UI for App
@@ -53,10 +53,9 @@ ui <- list(
     skin = "blue",
     ### Create the app header
     dashboardHeader(
-      title = "ML App", # You may use a shortened form of the title here
-      tags$li(class = "dropdown", actionLink("info", icon("info"))),
+      title = "Validation vs Testing", # You may use a shortened form of the title here
       tags$li(class = "dropdown",
-              tags$a(href='https://pennstate.qualtrics.com/jfe/form/SV_7TLIkFtJEJ7fEPz?appName=',
+              tags$a(href='https://pennstate.qualtrics.com/jfe/form/SV_7TLIkFtJEJ7fEPz?appName=Validation_vs_Testing',
                      icon("comments"))),
       tags$li(class = "dropdown",
               tags$a(href='https://shinyapps.science.psu.edu/',
@@ -68,7 +67,8 @@ ui <- list(
         id = "tabs",
         menuItem("Overview", tabName = "overview", icon = icon("dashboard")),
         menuItem("Prerequisites", tabName = "prerequisites", icon = icon("book")),
-        menuItem("Explore ML", tabName = "expl", icon = icon("wpexplorer"))
+        menuItem("Explore", tabName = "expl", icon = icon("wpexplorer")),
+        menuItem("References", tabName = "references", icon = icon("leanpub"))
         #menuItem("ML Challenge", tabName = "challenge", icon = icon("gamepad"))
       ),
       tags$div(
@@ -84,24 +84,30 @@ ui <- list(
         tabItem(
           tabName = "prerequisites",
           withMathJax(),
-          h4('Click the link to open page with basic machine learning information'),
-          h4('Please refer to the', a(href = 'https://towardsdatascience.com/workflow-of-a-machine-learning-project-ec1dba419b94', 'Machine Learning Cheatsheet', target="_blank"), 'for all the information needed.'),
+          h2('Prerequisites'),
+          p('Click the link to open page with basic machine learning information.'),
+          p('Please refer to the', a(href = 'https://towardsdatascience.com/workflow-of-a-machine-learning-project-ec1dba419b94', 'Machine Learning Cheatsheet', target="_blank", class = 'bodylinks'), 'for all the information needed'),
           p('In this app you will study how the accuracy of a machine learning algorithm
-            is affected by the percent of the cases in the training dataset vs the testing dataset.
+            is affected by the proportion of the cases in the training dataset vs the testing dataset.
             As you go pay attention to how the accuracy of the data along with the standard 
-            deviation increases and decreases.')
-         ),
+            deviation increases and decreases.'),
+          p('MSS: Mean Sum of Squares. This is used often for statistics and here is used to measure how far off a prediction is from the true value. The formula is \\(\\sum_{i=1}^n (x_i- \\bar x )^2\\)'),
+          
+          #helpText('$$\sum_{i=1}^n a_n$$'),
+          #withMathJax('$$\sum_{i=1}^n a_n$$'),
+        ),
         
         #### Set up the Overview Page
         tabItem(
           tabName = "overview",
           withMathJax(),
-          h1("Intro to Machine Learning"), # This should be the full name.
+          h1("Training vs Testing "), # This should be the full name.
           h2("Instructions"),
           tags$ol(
-            tags$li("Check over the prerequisites"),
-            tags$li("Examine the effect of percent of training Data on variance of the accuracy"),
-            tags$li("Examine the effect of percent of training Data on the accuracy mean")
+            tags$li("Check over the prerequisites."),
+            tags$li("Choose a Dataset and Variable to Predict"),
+            tags$li("Examine the effect of proportion of training data on variance of the accuracy."),
+            tags$li("Examine the effect of proportion of training data on the accuracy mean.")
           ),
           ##### Go Button--location will depend on your goals
           div(
@@ -118,7 +124,7 @@ ui <- list(
           br(),br(),
           h2("Acknowledgements"),
           p(
-            "This app was developed and coded by Ethan Wright",
+            "This app was developed and coded by Ethan Wright.",
             br(),
             "I would like to extend a special thanks to the Shiny Program
             Students.",
@@ -131,9 +137,9 @@ ui <- list(
         tabItem(
           tabName = "expl",
           withMathJax(),
-          h2("Explore testing percent"),
-          t("The normal amount of training data set vs validation data set is"),
-          t("80% training and 20% test set"),
+          h1("Explore Testing Proportion"),
+          t("The normal amount of training data set vs testing data set is"),
+          t("80% training and 20% test set."),
           br(), br(),
           wellPanel(
           fluidRow(
@@ -179,8 +185,8 @@ ui <- list(
                                               'Ridge Regression', 'LASSO'), 
                                selected = 'Linear Discriminant Analysis'),
                    #Ethan 10/1
-                   selectInput(inputId = 'repetitions', label = 'number of repititions at each value',
-                               choices = list(5,10,20,30,40,50,70,100,3000),
+                   selectInput(inputId = 'repetitions', label = 'Number of repititions at each value',
+                               choices = list(5,10,20,30,40,50,70,100),
                                selected = 20),
                    #actionButton('runTest', 'Test Accuracy'),
                    actionButton('newGraphOutput', 'Add Points to Graph'),
@@ -202,13 +208,18 @@ ui <- list(
           ),
           
         ),
+        tabItem(tabName = "references",
+                withMathJax(),
+                h2("References"),
+        ),
         
-        
+        #This section is under developement. Want to have some multiple choice questions
+          #to make sure the user has acheived the main learning goals. 
         tabItem(
           tabName = "challenge",
           withMathJax(),
           h2(inputId = "Now do it yourself",label = "test"),
-          h3('Observations'),
+          h2('Observations'),
           p('Everything is a trade off between accuracy and consistency.
             The more of the data is used for training the more accurate
             (unless oversampling occurs) the estimate. More of the data used for
@@ -243,7 +254,7 @@ server <- function(input, output, session) {
     }
     else
     {
-     yLabel <- "The MSOS of the error (so lower the better)"
+     yLabel <- "The MSS of the error (so lower the better)"
     }
     yLabel
   })
@@ -352,7 +363,7 @@ server <- function(input, output, session) {
        iris
       })
       output$dataTableInfo <- renderText({
-        "Machine learning dataset containing various measurments of different species of iris flowers"
+        "Popular machine learning dataset containing various measurments of different species of iris flowers"
       })
       output$dataTableVariables <- renderText({
         "
@@ -392,7 +403,7 @@ server <- function(input, output, session) {
         dataset
       })
       output$dataTableInfo <- renderText({
-        "Simple dataset to predict continous values most notably the overall sales"
+        "Simple dataset to predict continuous values most notably the overall sales"
       })
       output$dataTableVariables <- renderText({
         "<ul><li><b>youtube: Youtube advertising spent in thousands of dollars</b></li><li>
@@ -518,7 +529,6 @@ server <- function(input, output, session) {
     
     sapply(trainingDataset,class)
 
-
     if(method == 'Linear Discriminant Analysis') {
       fit.lda <- lda(eval(parse(text = paste(predictionVariable,'~.'))), data=trainingDataset, na.action="na.omit")
       predictions <- predict(object = fit.lda, newdata = validation)
@@ -597,14 +607,14 @@ server <- function(input, output, session) {
     else #For continuous
     {
       count <- 0
-      MSOS <- 0
+      MSS <- 0
       for(number in finalPredictions)
       {
         count <- count + 1
-        MSOS = MSOS + ((number - eval(parse(text= paste('validation$',predictionVariable,'[',count,']'))))^2)
+        MSS = MSS + ((number - eval(parse(text= paste('validation$',predictionVariable,'[',count,']'))))^2)
       }
-      MSOS <- MSOS / count
-      return(MSOS)
+      MSS <- MSS / count
+      return(MSS)
     }
   }
   #----Ouput runTest 1 accuracy function----
@@ -740,7 +750,7 @@ server <- function(input, output, session) {
      count <- 1
      
      #As the probability is being calculated these lists store the values from each test and sort them by percent in training data 
-     #  so for instance consistency70 is 70% testing data and 30% validation data
+     #  so for instance consistency70 is 70% training data and 30% validation data
      consistency50 <- vector(mode = "list", length = totalRuns)
      consistency55 <- vector(mode = "list", length = totalRuns)
      consistency60 <- vector(mode = "list", length = totalRuns)
@@ -753,7 +763,7 @@ server <- function(input, output, session) {
      consistency95 <- vector(mode = "list", length = totalRuns)
      
      count <- 1
-     #Each run calculates 1 accuracy for each of the 10 percentages.
+     #Each run calculates 1 accuracy for each of the 10 training prportions
      #  It runs as many times as totalRuns and 
      while(count <= totalRuns)
      {
@@ -806,7 +816,7 @@ server <- function(input, output, session) {
             xlab("Percent In Training Set") +
             ylab("% Correct") +
             theme(text = element_text(size=20)) +
-            geom_point() +
+            geom_point(alpha = 0.25) +
             stat_smooth(method = "lm", formula = y ~ poly(x, 3), size = 1, se = FALSE)
           })
         
@@ -817,7 +827,7 @@ server <- function(input, output, session) {
             xlab("Percent In Training Set") +
             ylab("Standard deviation of % Correct") +
             theme(text = element_text(size=20)) +
-            geom_point() +
+            geom_point(alpha = 0.25) +
             stat_smooth(method = "lm", formula = y ~ poly(x, 3), size = 1, se = FALSE)
           })
      }
@@ -827,9 +837,9 @@ server <- function(input, output, session) {
        
        output$overallPlot <- renderPlot({ggplot(data = accuracyDataFrame, aes(testingPercent * 100, percentCorrectCalculation)) +
            xlab("Percent In Training Set") +
-           ylab("MSOS of the Distance From Answer") +
+           ylab("MSS of the Distance From Answer") +
            theme(text = element_text(size=20)) +
-           geom_point() +
+           geom_point(alpha = 0.25) +
            stat_smooth(method = "lm", formula = y ~ poly(x, 3), size = 1, se = FALSE)
          })
        
@@ -856,9 +866,8 @@ server <- function(input, output, session) {
     
     if(input$theDataSet == 'Iris'){
       dataset <- na.omit(iris)
-      predictor <- iris$Species      #predictor is the variable that we are going to try to predict based off training data algorithm testing the validation algorithm
-      #print(predictor)
-      #print("End of first output of predictor") 
+      #predictor is the variable that we are going to try to predict
+      predictor <- iris$Species
       predictionVariable <- input$theVariable
       #outputType <- "categorical"
     }
@@ -934,17 +943,17 @@ server <- function(input, output, session) {
   ) +
     theme_bw() +
     xlab("Proportion in Training Set") +
-    ylab("MSOS error") +
+    ylab("MSS error") +
     labs(title = "The Accuracy of Every Test") +
     theme(
       text = element_text(size = 18)
     ) +
     scale_x_continuous(limits = c(.2, 1), expand = expansion(mult = 0.01, add = 0)) +
-    scale_y_continuous(limits = c(100, 550), expand = expansion(mult = 0.01, add = 0))
+    scale_y_continuous(limits = c(100, 550), expand = expansion(mult = 0.01, add = 0), labels = scaleFUN)
   
   output$variancePlot <- renderPlot({
       basePerformPlot +
-        scale_y_continuous(limits = c(minYAxis(), maxYAxis(), expand = expansion(mult = 0.01, add = 0))) +
+        scale_y_continuous(limits = c(minYAxis(), maxYAxis(), expand = expansion(mult = 0.01, add = 0)), labels = scaleFUN) +
           geom_point(
           data = tracking$DT,
           mapping = aes(
@@ -1000,8 +1009,10 @@ server <- function(input, output, session) {
       ) +
       xlab("Proportion in Training Set") +
       ylab(yLabel()) +
-      labs(title = "The Average Accuracy") +
-      stat_smooth(method = "lm", formula = y ~ poly(x, 1), size = 1, se = FALSE)
+      labs(title = "The Mean Accuracy") +
+      stat_smooth(method = "lm", formula = y ~ poly(x, 1), size = 1, se = FALSE) +
+      scale_x_continuous(limits = c(.2, 1)) + 
+      scale_y_continuous(labels = scaleFUN)
     })
 }
 

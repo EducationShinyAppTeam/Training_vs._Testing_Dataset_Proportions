@@ -1,5 +1,5 @@
-Title: Validation_vs_Testing_Dataset_App
-ShortName: Validation vs Test
+Title: Training_vs_Testing_Dataset_App
+ShortName: Training vs Testing
 Date: 2020-11-25
 Lifecycle: experimental
 Authors@R: c(
