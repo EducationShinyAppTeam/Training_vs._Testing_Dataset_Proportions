@@ -1,5 +1,10 @@
+<<<<<<< HEAD:Description.txt
 Title: Training_vs_Testing_Dataset_App
 ShortName: Training vs Testing
+=======
+Title: Validation vs Testing Dataset App
+ShortName: Validation vs Test
+>>>>>>> be581ffa0bbb46997cc578c4e27434bef6443587:DESCRIPTION
 Date: 2020-11-25
 Lifecycle: experimental
 Authors@R: c(
@@ -12,8 +17,10 @@ LearningObjectives: c(
     "The student will learn to see the effects the presense of outliers and number of observations."
   )
 DisplayMode: Normal
-URL: https://psu-eberly.shinyapps.io/Sample_App
-BugReports: https://github.com/EducationShinyAppTeam/Sample_App/issues
+URL: https://psu-eberly.shinyapps.io/Validation_vs_Testing_Dataset_App
+BugReports: https://github.com/EducationShinyAppTeam/Validation_vs_Testing_Dataset_App/issues
 License: CC-BY-NC-SA-4.0
-Tags: simulation
+Tags: simulation, real data
 Type: Shiny
+
+
