@@ -157,7 +157,7 @@ ui <- list(
                                    choices = list(5,10,20,30,40,50,70,100),
                                    selected = 20),
                        #actionButton('runTest', 'Test Accuracy'),
-                       sliderInput('testingPercent','Percent tester',
+                       sliderInput('testingPercent','Proportion of data in training set',
                                    min = .2, max = .95, value = .80, step = .05),
                        actionButton('newGraphOutput', 'Add Points to Graph'),
                        
