@@ -1,14 +1,10 @@
-<<<<<<< HEAD:Description.txt
-Title: Training_vs_Testing_Dataset_App
-ShortName: Training vs Testing
-=======
-Title: Validation vs Testing Dataset App
-ShortName: Validation vs Test
->>>>>>> be581ffa0bbb46997cc578c4e27434bef6443587:DESCRIPTION
+Title: Training vs. Testing Dataset Proportions
+ShortName: Training vs. Testing
 Date: 2020-11-25
 Lifecycle: experimental
 Authors@R: c(
-    person(given = "Ethan", family = "Wright", email = "ejw36@psu.edu", role = c("aut", "cre"))
+    person(given = "Ethan", family = "Wright", email = "ejw36@psu.edu", role = c("aut", "cre")),
+    person(given = "Neil", family = "Hatfield", email = "njh5464@psu.edu", role = c("ctb"))
   )
 Chapter: Data Science
 Description: This app was created in order to teach students about how to decide on what percent of data should be dedicated to training vs percent dedicated to the validation set. 

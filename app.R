@@ -1,206 +1,434 @@
-# Load Packages
-
-
 # The core to this concept is that the less data in testing the more variance in
 # performance statistic.
 # Then less in-training data the parameter estimates have greater variance.
 # https://stackoverflow.com/questions/13610074/
 # The [name] package does have , "Resistant Regression",
-# "multiple Correspondance Analysis", "Quadratic Discriminant Analysis", "
+# "multiple Correspondence Analysis", "Quadratic Discriminant Analysis", "
 # predict.lqs, predict.mca, predict.qda, predict.profile.glm
 
-
+# Load Packages ----
 library(shiny)
 library(shinydashboard)
 library(shinyBS)
 library(boastUtils)
 library(caret)
-#library(ellipse)
-#library(e1071)
 library(kernlab)
-#library(randomForest)
 library(ggplot2)
 library(palmerpenguins)
-#library(profvis)
 library(MASS)
 library(glmnet)
 library(lars)
 library(DT)
 
+# Packages for Future Versions
+# library(ellipse)
+# library(e1071)
+# library(randomForest)
+# library(profvis)
+
 # Define global functions and constants, load data ----
-
 data(iris)
-scaleFUN <- function(x) sprintf("%.1f", x)
+data("penguins")
+marketing <- read.csv("marketing.csv")
+heartDisease <- read.csv("HeartDiseaseData.csv")
 
-{
-  # Define UI for App
-  ui <- list(
-    tags$head(
-      tags$link(rel = "stylesheet", type = "text/css",
-                href = "https://educationshinyappteam.github.io/Style_Guide/theme/boast.css")
-      #href = "boast.css") ## This is for Neil's testing purposes
+scaleFUN <- function(x){ sprintf("%.1f", x) }
+
+#Input: data set, the testingPercent (average .8), method used
+#output: returns the percent accuracy of the model.
+#percent <- calculateAccuracy(dataset, input$testingPercent, input$theMethod, predictor, predictionVariable)
+#predictor replaces theDataSet$Species, predictionVariable is just 'variableString'
+calculateAccuracy <- function(theDataSet, testingPercent, method, predictor, predictionVariable){
+  validation_index <- createDataPartition(
+    y = predictor,
+    p = testingPercent,
+    list = FALSE
+  ) #p usually input$testingPercent
+  #dataset <- dataset(na.action=na.exclude)
+  validation <- theDataSet[-validation_index,]
+
+  trainingDataset <- theDataSet[validation_index,]
+  sapply(trainingDataset, class)
+
+  if (method == 'Linear Discriminant Analysis') {
+    fit.lda <- lda(
+      eval(parse(text = paste(predictionVariable,'~.'))),
+      data = trainingDataset,
+      na.action = "na.omit"
+    )
+    predictions <- predict(object = fit.lda, newdata = validation)
+    finalPredictions <- predictions$class
+    outputType <- "categorical"
+  } else if (method == 'Multiple Linear Regression') {
+    fit.lm <- lm(
+      eval(parse(text = paste(predictionVariable, '~.'))),
+      data = trainingDataset
+    )
+    finalPredictions <- predict(fit.lm, validation)
+    outputType <- "continuous"
+  } else if (method == 'Logistic Regression') {
+    fit.lr <- glm(
+      eval(parse(text = paste(predictionVariable, '~.'))),
+      data = trainingDataset,
+      family = "binomial"
+    )
+    probabilities <- predict(fit.lr, validation, type = "response")
+    if (predictionVariable ==  "sex") {
+      finalPredictions <- ifelse(probabilities < 0.5, "female", "male")
+    } else if (predictionVariable == "target") {
+      finalPredictions <- ifelse(probabilities > 0.5, 1, 0) #1 unhealthy and 2 healthy
+    } else {
+      print("")
+    }
+    #fit.lr <- glm(target ~ ., data = trainingDataset, family = "binomial")
+    #probabilities <- predict(fit.lr, validation, type = "response")
+    #finalPredictions <- ifelse(probabilities > 0.5, "Unhealthy", "Healthy")
+    outputType <- "categorical"
+  } else if (method == "Ridge Regression") {
+    #x <- model.matrix( ~ ., trainingDataset)
+    x <- as.matrix(trainingDataset[, names(trainingDataset) != predictionVariable])
+    y <- as.matrix(trainingDataset[, predictionVariable])
+
+    fit.glm <- glmnet(x, y, family = "gaussian", alpha = 0, lambda = 0.001)
+    finalPredictions <- predict(
+      fit.glm,
+      data.matrix(validation[, names(trainingDataset) != predictionVariable]),
+      type = "response" #type used to = "link"
+    )
+    outputType <- "continuous"
+  } else if (method == "LASSO") {
+    # fit model
+    #print(theDataSet[,1:3])
+    x <- data.matrix(trainingDataset[, names(trainingDataset) != predictionVariable])
+    y <- data.matrix(trainingDataset[, predictionVariable])
+    fit.lars <- lars(x, y, type = "lasso")
+    # select a step with a minimum error
+    best_step <- fit.lars$df[which.min(fit.lars$RSS)]
+    # make predictions
+    finalPredictions <- predict(
+      fit.lars,
+      data.matrix(validation[,names(trainingDataset) != predictionVariable]),
+      s = best_step,
+      type = "fit"
+    )$fit
+    outputType <- "continuous"
+  } else {
+
+  }
+
+  #6 Make predictions
+  #Estimate accuracy of LDA on validation dataset
+  if (outputType == "categorical") {
+    count <- 0
+    correct <- 0
+    for (word in finalPredictions) {
+      count <- count + 1
+      if (word == eval(parse(text = paste('validation$',predictionVariable,'[',count,']'))))
+        correct <- correct + 1
+    }
+    percentCorrect <- correct / count
+    percentCorrect <- percentCorrect * 100
+    return(percentCorrect)
+  } else {# For continuous
+    count <- 0
+    MSE <- 0
+    for (number in finalPredictions) {
+      count <- count + 1
+      MSE = MSE + ((number - eval(parse(text = paste('validation$',predictionVariable,'[',count,']'))))^2)
+    }
+    MSE <- MSE / count
+    return(MSE)
+  }
+}
+
+# Define UI for App ----
+ui <- list(
+  dashboardPage(
+    skin = "green",
+    ## Header ----
+    dashboardHeader(
+      title = "Training vs. Testing", # You may use a shortened form of the title here
+      tags$li(class = "dropdown",
+              tags$a(href = 'https://pennstate.qualtrics.com/jfe/form/SV_7TLIkFtJEJ7fEPz?appName=Training_vs._Testing_Dataset_Proportions',
+                     icon("comments"))),
+      tags$li(class = "dropdown",
+              tags$a(href = 'https://shinyapps.science.psu.edu/',
+                     icon("home")))
     ),
-    
-    #This is in the UI
-    
-    # Example Call: createFillInBlank("As the difference between points _word1 their reliability _word2")
-    
-    ## Create the app page
-    dashboardPage(
-      skin = "green",
-      ## Header ----
-      dashboardHeader(
-        title = "Training vs Testing", # You may use a shortened form of the title here
-        tags$li(class = "dropdown",
-                tags$a(href='https://pennstate.qualtrics.com/jfe/form/SV_7TLIkFtJEJ7fEPz?appName=Validation_vs_Testing_Dataset_App',
-                       icon("comments"))),
-        tags$li(class = "dropdown",
-                tags$a(href = 'https://shinyapps.science.psu.edu/',
-                       icon("home")))
+    ## Sidebar ----
+    dashboardSidebar(
+      sidebarMenu(
+        id = "pages",
+        menuItem("Overview", tabName = "overview", icon = icon("tachometer-alt")),
+        menuItem("Prerequisites", tabName = "prerequisites", icon = icon("book")),
+        menuItem("Explore", tabName = "expl", icon = icon("wpexplorer")),
+        menuItem("References", tabName = "references", icon = icon("leanpub"))
+        # Future development idea
+        # menuItem("ML Challenge", tabName = "challenge", icon = icon("gamepad"))
       ),
-      ## Sidebar ----
-      dashboardSidebar(
-        sidebarMenu(
-          id = "pages",
-          menuItem("Overview", tabName = "overview", icon = icon("dashboard")),
-          menuItem("Prerequisites", tabName = "prerequisites", icon = icon("book")),
-          menuItem("Explore", tabName = "expl", icon = icon("wpexplorer")),
-          menuItem("References", tabName = "references", icon = icon("leanpub"))
-          #menuItem("ML Challenge", tabName = "challenge", icon = icon("gamepad"))
-        ),
-        tags$div(
-          class = "sidebar-logo",
-          boastUtils::psu_eberly_logo("reversed")
-        )
-      ),
-      ## Body ----
-      dashboardBody(
-        ### Prerequisites Page ----
-        tabItems(
-          tabItem(
-            tabName = "prerequisites",
-            withMathJax(),
-            h2('Prerequisites'),
-            p('Click the link to open page with basic machine learning information.'),
-            p('Please refer to the', a(href = 'https://towardsdatascience.com/workflow-of-a-machine-learning-project-ec1dba419b94', 'Machine Learning Cheatsheet', target="_blank"), 'for all the information needed.'),
-            p('In this app you will study how the accuracy of a machine learning algorithm
-            is affected by the proportion of the cases in the training dataset vs the testing dataset.
-            As you go pay attention to how the accuracy of the data along with the standard 
-            deviation increases and decreases.'),
-            p('MSE: Mean Square Error. This is used often for statistics and here is used to measure how far off a prediction is from the true value. The formula is \\(\\sum_{i=1}^n (x_i- \\bar x )^2\\) *fix this'),
-            
-            #helpText('$$\sum_{i=1}^n a_n$$'),
-            #withMathJax('$$\sum_{i=1}^n a_n$$'),
+      tags$div(
+        class = "sidebar-logo",
+        boastUtils::psu_eberly_logo("reversed")
+      )
+    ),
+    ## Body ----
+    dashboardBody(
+      tabItems(
+        ### Overview Page ----
+        tabItem(
+          tabName = "overview",
+          withMathJax(),
+          h1("Training vs. Testing Dataset Proportions"),
+          p('In this app you will study how the accuracy of a machine learning
+            algorithm is affected by the proportion of the cases in the training
+            dataset vs the testing dataset. As you explore, pay attention to how
+            the accuracy of the estimates along with their standard deviation
+            varies with the proportion of cases in the training set.'),
+          h2("Instructions"),
+          tags$ol(
+            tags$li("Look over the prerequisites."),
+            tags$li("Choose a Dataset and Variable to Predict"),
+            tags$li("Examine the effect of proportion of training data on
+                    variance of the accuracy."),
+            tags$li("Examine the effect of proportion of training data on the
+                    accuracy mean.")
           ),
-          
-          #### Set up the Overview Page
-          tabItem(
-            tabName = "overview",
-            withMathJax(),
-            h1("Training vs Testing "), # This should be the full name.
-            p("This app teaches students about the tradeoffs when choosing how high the proportion of training data should be."),
-            h2("Instructions"),
-            tags$ol(
-              tags$li("Check over the prerequisites."),
-              tags$li("Choose a Dataset and Variable to Predict"),
-              tags$li("Examine the effect of proportion of training data on variance of the accuracy."),
-              tags$li("Examine the effect of proportion of training data on the accuracy mean.")
-            ),
-            div(
-              style = "text-align: center;",
-              bsButton(
-                inputId = "go1",
-                label = "GO!",
-                size = "large",
-                icon = icon("bolt"),
-                style = "default"
-              )
-            ),
-            br(),
-            br(),
-            h2("Acknowledgements"),
-            p(
-              "This app was developed and coded by Ethan Wright.",
-              br(),
-              "I would like to extend a special thanks to the Shiny Program
-            Students.",
-              br(),br(),br(),
-              div(class = "updated", "Last Update: 12/07/2020 by EJW")
+          div(
+            style = "text-align: center;",
+            bsButton(
+              inputId = "go1",
+              label = "GO!",
+              size = "large",
+              icon = icon("bolt"),
+              style = "default"
             )
           ),
-          
-          ###Explore Page ---
-          tabItem(
-            tabName = "expl",
-            withMathJax(),
-            tabsetPanel(
-              tabPanel("Exploration",
-                       h1("Explore Testing Proportion"),
-                       br(), br(),
-                       fluidRow(
-                         column(5,
-                                wellPanel(
-                                  selectInput(inputId = 'theDataSet', label = 'Dataset', choices = list('Heart Disease', 'Palmer Penguins', 'Marketing','Iris'), selected = 'Heart Disease'),
-                                  selectInput(inputId = 'theVariable', label = 'Variable to predict', choices = list('Species', 'Sepal.Length', 'Sepal.Width', 'Petal.Length', 'Petal.Width'), selected = 'Species'),
-                                  uiOutput("dataTableVariables"),
-                                  selectInput(inputId = 'theMethod', label = 'Method', 
-                                              choices = list('Linear Discriminant Analysis',
-                                                             'Multiple Linear Regression','Logistic Regression',
-                                                             'Ridge Regression', 'LASSO'), 
-                                              selected = 'Linear Discriminant Analysis'),
-                                  selectInput(inputId = 'repetitions', label = 'Number of repititions at each value',
-                                              choices = list(5,10,20,30,40,50,70,100),
-                                              selected = 20),
-                                  #actionButton('runTest', 'Test Accuracy'),
-                                  sliderInput('testingPercent','Proportion of data in training set',
-                                              min = .2, max = .95, value = .80, step = .05),
-                                  actionButton('newGraphOutput', 'Add Points to Graph'),
-                                  
-                                  textOutput('accuracyResult'),
-                                )
-                         ),
-                         column(7,
-                                plotOutput(outputId = "variancePlot", width = "100%"),
-                                plotOutput(outputId = "AccuracyPlot", width = "100%"),
-                         ),
-                         
-                       ),
+          br(),
+          br(),
+          h2("Acknowledgements"),
+          p(
+            "This app was developed and coded by Ethan Wright.",
+            br(),
+            br(),
+            br(),
+            div(class = "updated", "Last Update: 12/08/2020 by NJH")
+          )
+        ),
+        ### Prerequisites Page ----
+        tabItem(
+          tabName = "prerequisites",
+          withMathJax(),
+          h2('Prerequisites'),
+          p(
+            'Please refer to the',
+            a(
+              href = 'https://towardsdatascience.com/workflow-of-a-machine-learning-project-ec1dba419b94',
+              'Machine Learning Cheatsheet',
+              target = "_blank",
+              class = "bodylinks"
+            ),
+            'for all the information needed.'
+          ),
+          p('MSE: Mean Square Error. This is used often for statistics and here
+            is used to measure how far off a prediction is from the true value.
+            The formula is
+            \\(\\frac{1}{n}\\sum_{i=1}^n \\left(x_i- \\widehat{x}\\right)^2\\).'),
+        ),
+        ### Explore Page ----
+        tabItem(
+          tabName = "expl",
+          withMathJax(),
+          h2("Explore Testing Proportion"),
+          p("Select a dataset and a variable to predict."),
+          fluidRow(
+            column(
+              width = 4,
+              selectInput(
+                inputId = 'theDataSet',
+                label = 'Dataset',
+                choices = list(
+                  'Heart Disease',
+                  'Palmer Penguins',
+                  'Marketing',
+                  'Iris'
+                ),
+                selected = 'Heart Disease'
               ),
-              tabPanel("The Dataset",
-                       DT::dataTableOutput("dataTable") #Shows first 10 cases in table
+              selectInput(
+                inputId = 'theVariable',
+                label = 'Variable to predict',
+                choices = c("filler")
+              ),
+              uiOutput("dataTableInfo")
+            ),
+            column(
+              width = 8,
+              p(
+                "Variable Names and Descriptions--variables in bold indicate
+                which you can select to predict."
+              ),
+              uiOutput("dataTableVariables")
+            )
+          ),
+          br(),
+          fluidRow(
+            column(
+              width = 4,
+              wellPanel(
+                selectInput(
+                  inputId = 'theMethod',
+                  label = 'Select a method',
+                  choices = c("filler"),
+                ),
+                selectInput(
+                  inputId = 'repetitions',
+                  label = 'Number of training sets to generate',
+                  choices = list(5, 10, 20, 30, 40, 50, 70, 100),
+                  selected = 20
+                ),
+                sliderInput(
+                  inputId = 'testingPercent',
+                  label = 'Proportion of data in training set',
+                  min = 0.2,
+                  max = 0.95,
+                  value = 0.80,
+                  step = 0.05
+                ),
+                bsButton(
+                  inputId = 'newGraphOutput',
+                  label = 'Run method',
+                  style = "default",
+                  size = "large",
+                  icon = icon("bolt")
+                )
               )
             ),
-            
-          ),
-          tabItem(tabName = "references",
-                  withMathJax(),
-                  h2("References"),
-          ),
-          # Challenge Page (Future Development?) ----
-          tabItem(
-            tabName = "challenge",
-            withMathJax(),
-            h2(inputId = "Now do it yourself",label = "test"),
-            h2('Observations'),
-            p('Everything is a trade off between accuracy and consistency.
-            The more of the data is used for training the more accurate
-            (unless oversampling occurs) the estimate. More of the data used for
-            testing you will get a result that more accuratetly measures how good
-            the data algorithm is'),
-            p('If the percent correct is very high you may as well just
-            go with low training and high testing to make sure you get an accurate result')
+            column(
+              width = 8,
+              tabsetPanel(
+                id = "results",
+                type = "tabs",
+                tabPanel(
+                  title = "Plots",
+                  plotOutput(outputId = "variancePlot", width = "100%"),
+                  plotOutput(outputId = "AccuracyPlot", width = "100%"),
+                ),
+                tabPanel(
+                  title = "Data",
+                  br(),
+                  DT::dataTableOutput("dataTable") #Shows first 10 cases in table
+                )
+              )
+            )
           )
-        )
+        ),
+        ### References ----
+        tabItem(
+          tabName = "references",
+          withMathJax(),
+          h2("References"),
+          p(
+            class = "hangingindent",
+            "Bailey, E. (2015). shinyBS: Twitter bootstrap components for shiny.
+            (v0.61). [R package]. Available from https://CRAN.R-project.org/package=shinyBS"
+          ),
+          p(
+            class = "hangingindent",
+            "Carey, R. and Hatfield, N. (2020). boastUtils: BOAST Utilities.
+            (v0.1.10). [R Package]. Available from https://github.com/EducationShinyAppTeam/boastUtils"
+          ),
+          p(
+            class = "hangingindent",
+            "Chang, W. and Borges Ribeio, B. (2018). shinydashboard: Create
+            dashboards with 'Shiny'. (v0.7.1) [R Package]. Available from
+            https://CRAN.R-project.org/package=shinydashboard"
+          ),
+          p(
+            class = "hangingindent",
+            "Chang, W., Cheng, J., Allaire, J., Xie, Y., and McPherson, J. (2020).
+            shiny: Web application framework for R. (v1.5.0) [R Package]. Available
+            from https://CRAN.R-project.org/package=shiny"
+          ),
+          p(
+            class = "hangingindent",
+            "Friedman, J., Hastie, T., and Tibshirani, R. (2010). Regularization Paths for
+            Generalized Linear Models via Coordinate Descent. Journal of Statistical Software
+            33(1), 1-22. Available at http://www.jstatsoft.org/v33/i01/"
+          ),
+          p(
+            class = "hangingindent",
+            "Hastie, T., and Efron, B. (2013). lars: Least Angle Regression, Lasso, and
+            Forward Stagewise. (v 1.2) [R Package]. Available from
+            https://CRAN.R-project.org/package=lars"
+          ),
+          p(
+            class = "hangingindent",
+            "Horst, A. M., Hill, A. P., and Gorman, K. B. (2020). palmerpenguins: Palmer
+            Archipelago (Antarctica) penguin data. (v 0.1.0) [R Package]. Available
+            from https://allisonhorst.github.io/palmerpenguins/"
+          ),
+          p(
+            class = "hangingindent",
+            "Karatzoglou, A., Smola, A., Hornik, K. and Zeileis, A. (2004).
+            kernlab - An S4 package for kernal methods in R. Journal of Statistical Software
+            11(9), 1-20.  Available at http://www.jstatsoft.org/v11/i09/"
+          ),
+          p(
+            class = "hangingindent",
+            "Kuhn, M. (2020). caret: Classification and Regression Training (v 6.0-86)
+            [R Package]. Available from https://CRAN.R-project.org/package=caret"
+          ),
+          p(
+            class = "hangingindent",
+            "Venables, W., N., and Ripley, B., D. (2002). Modern Applied Statistics with
+            S. Fourth Edition. Springer, New York. [MASS Package]"
+          ),
+          p(
+            class = "hangingindent",
+            "Wickham, H. ggplot2: Elegant Graphics for Data Analysis.
+            Springer-Verlag New York, 2016. Available at https://ggplot2.tidyverse.org"
+          ),
+          p(
+            class = "hangingindent",
+            "Xie, Y., Cheng, J., and Tan, X. (2020). DT: A Wrapper of the
+            JavaScript Library 'DataTables'. R package version 0.16.
+            https://CRAN.R-project.org/package=DT"
+          ),
+          br(),
+          br(),
+          br(),
+          boastUtils::copyrightInfo()
+        ) #,
+        # Challenge Page (Future Development?) ----
+        # tabItem(
+        #   tabName = "challenge",
+        #   withMathJax(),
+        #   h2(inputId = "Now do it yourself",label = "test"),
+        #   h2('Observations'),
+        #   p('Everything is a trade off between accuracy and consistency.
+        #     The more of the data is used for training the more accurate
+        #     (unless oversampling occurs) the estimate. More of the data used for
+        #     testing you will get a result that more accuratetly measures how good
+        #     the data algorithm is'),
+        #   p('If the percent correct is very high you may as well just
+        #     go with low training and high testing to make sure you get an accurate result')
+        # )
       )
     )
-  )}
+  )
+)
 
-# Define server logic
+# Define the server ----
 server <- function(input, output, session) {
   ## Define what GO button does
   observeEvent(input$go1, {
-    updateTabItems(session, "tabs", "expl")
+    updateTabItems(
+      session = session,
+      inputId = "pages",
+      selected = "expl"
+    )
   })
+
   tracking <- reactiveValues()
   tracking$DT <- data.frame(
     percentTraining = numeric(),
@@ -215,715 +443,258 @@ server <- function(input, output, session) {
     }
     else
     {
-      yLabel <- "MSE (so lower the better)"
+      yLabel <- "MSE (the lower, the better)"
     }
     yLabel
   })
-  
-  maxYAxis <- reactive({
-    if(input$theVariable == "Sepal.Length")
-    {
-      maxYAxis <- .2
-    }
-    else if(input$theVariable == "Species")
-    {
-      maxYAxis <- .95
-    }
-    else if(input$theVariable == "species")
-    {
-      maxYAxis <-100
-    }
-    else if(input$theVariable == "island")
-    {
-      maxYAxis <-75
-    }
-    else if(input$theVariable == "body_mass_g")
-    {
-      maxYAxis <-120000
-    }
-    else if(input$theVariable == "sex")
-    {
-      maxYAxis <-100
-    }
-    else if(input$theVariable == "youtube")
-    {
-      maxYAxis <-4000
-    }
-    else if(input$theVariable == "sales")
-    {
-      maxYAxis <-20
-    }
-    else if(input$theVariable == "target")
-    {
-      maxYAxis <-90
-    }
-    else if(input$theVariable == "trestbps")
-    {
-      maxYAxis <-400
-    }
-    else
-    {
-      #print("test")
-    }
-  })
-  
-  minYAxis <- reactive({
-    var <- input$theVariable
-    if(input$theVariable == "Sepal.Length")
-    {
-      minYAxis <-0
-    }
-    else if(input$theVariable == "Species")
-    {
-      minYAxis <-90
-    }
-    else if(input$theVariable == "species")
-    {
-      minYAxis <-90
-    }
-    else if(input$theVariable == "island")
-    {
-      minYAxis <-65
-    }
-    else if(input$theVariable == "body_mass_g")
-    {
-      minYAxis <-0
-    }
-    else if(input$theVariable == "sex")
-    {
-      minYAxis <-50
-    }
-    else if(input$theVariable == "youtube")
-    {
-      minYAxis <-0
-    }
-    else if(input$theVariable == "sales")
-    {
-      minYAxis <-0
-    }
-    else if(input$theVariable == "target")
-    {
-      minYAxis <-55
-    }
-    else if(input$theVariable == "trestbps")
-    {
-      minYAxis <-150
-    }
-    else
-    {
-      #print("test")
-    }
-  })
-  meanMaxYAxis <- reactive({
-    if(input$theVariable == "Sepal.Length")
-    {
-      maxYAxis <- .2
-    }
-    else if(input$theVariable == "Species")
-    {
-      maxYAxis <-100
-    }
-    else if(input$theVariable == "species")
-    {
-      maxYAxis <-100
-    }
-    else if(input$theVariable == "island")
-    {
-      maxYAxis <-75
-    }
-    else if(input$theVariable == "body_mass_g")
-    {
-      maxYAxis <-100000
-    }
-    else if(input$theVariable == "sex")
-    {
-      maxYAxis <-100
-    }
-    else if(input$theVariable == "youtube")
-    {
-      maxYAxis <-2000
-    }
-    else if(input$theVariable == "sales")
-    {
-      maxYAxis <-6
-    }
-    else if(input$theVariable == "target")
-    {
-      maxYAxis <-85
-    }
-    else if(input$theVariable == "trestbps")
-    {
-      maxYAxis <-400
-    }
-    else
-    {
-      #print("test")
-    }
-  })
-  meanMinYAxis <- reactive({
-    var <- input$theVariable
-    if(input$theVariable == "Sepal.Length")
-    {
-      minYAxis <- 0
-    }
-    else if(input$theVariable == "Species")
-    {
-      minYAxis <-.95
-    }
-    else if(input$theVariable == "species")
-    {
-      minYAxis <-99
-    }
-    else if(input$theVariable == "island")
-    {
-      minYAxis <-65
-    }
-    else if(input$theVariable == "body_mass_g")
-    {
-      minYAxis <-75000
-    }
-    else if(input$theVariable == "sex")
-    {
-      minYAxis <-64
-    }
-    else if(input$theVariable == "youtube")
-    {
-      minYAxis <-1400
-    }
-    else if(input$theVariable == "sales")
-    {
-      minYAxis <-3
-    }
-    else if(input$theVariable == "target")
-    {
-      minYAxis <-75
-    }
-    else if(input$theVariable == "trestbps")
-    {
-      minYAxis <-250
-    }
-    else
-    {
-      #print("test")
-    }
-  })
-  
-  ####### This changes what variables can be picked after the dataset selected changes
-  #----Dataset Chosen, observeEvent(input$theDataSet), ----
-  observeEvent(input$theDataSet, {
-    if(input$theDataSet == "Iris")
-    {
-      output$dataTable <- DT::renderDataTable({
-        iris
-      })
-      output$dataTableInfo <- renderText({
-        "Machine learning dataset containing various measurments of different species of iris flowers"
-      })
-      output$dataTableVariables <- renderText({
-        "<ul>
-         <li><strong>Sepal.Length: Length of the sepal in cm</strong></li>
-         <li>Sepal.Width: Length of the sepal in cm</li>
-         <li>Petal.Length: Length of the sepal in cm</li>
-         <li>Petal.Width: Length of the sepal in cm</li>
-         <li><strong>Species: Either Setosa, Versicolour or Virginica</strong></li>
-         </ul>"
-      })
-      updateSelectInput(session, inputId = "theVariable", label = NULL,
-                        choices = list('Sepal.Length', 'Species'))
-    }
-    else if(input$theDataSet == "Palmer Penguins"){
-      output$dataTable <- DT::renderDataTable({
-        penguins
-      })
-      output$dataTableInfo <- renderText({
-        "Machine learning algorithm to try and learn the type of penguins"
-      })
-      output$dataTableVariables <- renderText({
-        "<ul>
-        <li><strong>Species: Species of penguin</strong></li>
-        <li><strong>island: Which island in Palmer Archipelago penguin was found on</strong></li>
-        <li>bill_length_mm: bill length in milimeters</li>
-        <li>bill_depth_mm: bill depth in milimeters</li>
-        <li>flipper_length_mm: flipper length in milimeters</li>
-        <li><strong>body_mass_g: Total mass of penguin in grams</strong></li>
-        <li><strong>sex: (Male or Female)</strong></li>
-        </ul>"
-      })
-      updateSelectInput(session, inputId = "theVariable", label = NULL,
-                        choices = list('species','island', 'body_mass_g', 'sex'))
-    }
-    else if(input$theDataSet == "Marketing"){
-      dataset <- read.csv("marketing.csv")
-      output$dataTable <- DT::renderDataTable({
-        dataset
-      })
-      output$dataTableInfo <- renderText({
-        "Simple dataset to predict continuous values most notably the overall sales"
-      })
-      output$dataTableVariables <- renderText({
-        "<ul>
-        <li><strong>youtube: Youtube advertising spent in thousands of dollars</strong></li>
-        <li>facebook: Facebook advertising spent in thousands of dollars</li>
-        <li>newspaper: Newspaper advertising spent in thousands of dollars</li>
-        <li><strong>sales: Total sales made in thousands of units</strong></li>
-        </ul>"
-      })
-      updateSelectInput(session, inputId = "theVariable", label = NULL,
-                        choices = list('youtube', 'sales'))
-    }
-    else if(input$theDataSet == "Heart Disease"){
-      dataset <- read.csv("HeartDiseaseData.csv")
-      #Cleaning
-      #dataset[dataset == "?"] <- NA
-      #dataset[dataset$sex == 0,]$sex <- "F"
-      #dataset[dataset$sex == 1,]$sex <- "M"
-      output$dataTable <- renderTable({
-        dataset
-      })
-      output$dataTable <-  DT::renderDataTable({dataset})
-      output$dataTableInfo <- renderText({
-        "This dataset adds extra challenge with its numerous continuous and categorical variables to be predicted."
-      })
-      output$dataTableVariables <- renderUI(
-        HTML("<ul>
-         <li>Age: in years</li>
-         <li>cp: chest pain type</li>
-         <li><strong>sex: male or female</strong></li>
-         <li><strong>trestbps: resting blood pressure</strong></li>
-         <li>chol: serum cholestoral in mg/dl, fasting blood sugar (yes or no)</li>
-         <li>restecg: resting electrocardiographic results</li>
-         <li>thalach: maximum heart rate</li>
-         <li>exang: exercise induced (yes or no)</li>
-         <li>oldpeak: ST depression induced by exercise relative to rest</li>
-         <li>Slope: of peak exercise ST segment,</li>
-         <li>ca: number of vessels colored by flourosopy (0-3) </li>
-         <li>thal: Thalassemia level (blood disorder) the lower the better</li>
-         <li><strong>target: heart disease (healthy or unhealthy)</strong></li>
-        </ul>")
+
+  # What are these for?
+  maxYAxis <- eventReactive(
+    eventExpr = input$theVariable,
+    valueExpr = {
+      switch(
+        EXPR = input$theVariable,
+        "Sepal.Length" = 0.2,
+        "Species" = 0.95,
+        "species" = 100,
+        "island" = 75,
+        "body_mass_g" = 120000,
+        "sex" = 100,
+        "youtube" = 4000,
+        "sales" = 20,
+        "target" = 100,
+        "trestbps" = 400
       )
-      updateSelectInput(session, inputId = "theVariable", label = NULL,
-                        choices = list('sex', 'trestbps', 'target'))
     }
-    else{
-      updateSelectInput(session,inputId = "theVariable", label = NULL,
-                        choices = list('problem','in','selection','above'))
+  )
+
+  minYAxis <- eventReactive(
+    eventExpr = input$theVariable,
+    valueExpr = {
+      switch(
+        EXPR = input$theVariable,
+        "Sepal.Length" = 0,
+        "Species" = 90,
+        "species" = 90,
+        "island" = 65,
+        "body_mass_g" = 0,
+        "sex" = 50,
+        "youtube" = 0,
+        "sales" = 0,
+        "target" = 55,
+        "trestbps" = 150
+      )
+    }
+  )
+
+  meanMaxYAxis <- eventReactive(
+    eventExpr = input$theVariable,
+    valueExpr = {
+      switch(
+        EXPR = input$theVariable,
+        "Sepal.Length" = 0.2,
+        "Species" = 100,
+        "species" = 100,
+        "island" = 75,
+        "body_mass_g" = 100000,
+        "sex" = 100,
+        "youtube" = 2000,
+        "sales" = 6,
+        "target" = 85,
+        "trestbps" = 400
+      )
+    }
+  )
+
+  meanMinYAxis <- eventReactive(
+    eventExpr = input$theVariable,
+    valueExpr = {
+      switch(
+        EXPR = input$theVariable,
+        "Sepal.Length" = 0,
+        "Species" = 0.95,
+        "species" = 99,
+        "island" = 65,
+        "body_mass_g" = 75000,
+        "sex" = 64,
+        "youtube" = 1400,
+        "sales" = 3,
+        "target" = 75,
+        "trestbps" = 250
+      )
+    }
+  )
+
+  ## Set the data set ----
+  chosenData <- eventReactive(
+    eventExpr = input$theDataSet,
+    valueExpr = {
+      list(
+        data = switch(
+          EXPR = input$theDataSet,
+          "Iris" = iris,
+          "Palmer Penguins" = penguins,
+          "Marketing" = marketing,
+          "Heart Disease" = heartDisease
+        ),
+        info = switch(
+          EXPR = input$theDataSet,
+          "Iris" = "Machine learning dataset containing various measurments of
+                    different species of iris flowers",
+          "Palmer Penguins" = "Machine learning algorithm to try and learn the
+                               type of penguins",
+          "Marketing" = "Simple dataset to predict continuous values most notably
+                         the overall sales",
+          "Heart Disease" = "This dataset adds extra challenge with its numerous
+                             continuous and categorical variables to be predicted."
+        ),
+        variables = switch(
+          EXPR = input$theDataSet,
+          "Iris" =  "<ul>
+                     <li><strong>Sepal.Length: Length of the sepal in cm</strong></li>
+                     <li>Sepal.Width: Length of the sepal in cm</li>
+                     <li>Petal.Length: Length of the sepal in cm</li>
+                     <li>Petal.Width: Length of the sepal in cm</li>
+                     <li><strong>Species: Either Setosa, Versicolour or Virginica</strong></li>
+                    </ul>",
+          "Palmer Penguins" = "<ul>
+                               <li><strong>Species: Species of penguin</strong></li>
+                               <li><strong>island: Which island in Palmer Archipelago penguin was found on</strong></li>
+                               <li>bill_length_mm: bill length in milimeters</li>
+                               <li>bill_depth_mm: bill depth in milimeters</li>
+                               <li>flipper_length_mm: flipper length in milimeters</li>
+                               <li><strong>body_mass_g: Total mass of penguin in grams</strong></li>
+                               <li><strong>sex: (Male or Female)</strong></li>
+                              </ul>",
+          "Marketing" = "<ul>
+                         <li><strong>youtube: Youtube advertising spent in thousands of dollars</strong></li>
+                         <li>facebook: Facebook advertising spent in thousands of dollars</li>
+                         <li>newspaper: Newspaper advertising spent in thousands of dollars</li>
+                         <li><strong>sales: Total sales made in thousands of units</strong></li>
+                        </ul>",
+          "Heart Disease" = "<ul>
+                             <li>Age: in years</li>
+                             <li>cp: chest pain type</li>
+                             <li><strong>sex: male or female</strong></li>
+                             <li><strong>trestbps: resting blood pressure</strong></li>
+                             <li>chol: serum cholestoral in mg/dl, fasting blood sugar (yes or no)</li>
+                             <li>restecg: resting electrocardiographic results</li>
+                             <li>thalach: maximum heart rate</li>
+                             <li>exang: exercise induced (yes or no)</li>
+                             <li>oldpeak: ST depression induced by exercise relative to rest</li>
+                             <li>Slope: of peak exercise ST segment,</li>
+                             <li>ca: number of vessels colored by flourosopy (0-3) </li>
+                             <li>thal: Thalassemia level (blood disorder) the lower the better</li>
+                             <li><strong>target: heart disease (healthy or unhealthy)</strong></li>
+                            </ul>"
+        )
+      )
+    }
+  )
+
+  ## Display data information ----
+  observeEvent(input$theDataSet, {
+    ### Data Table
+    output$dataTable <- DT::renderDataTable(
+      expr = chosenData()$data,
+      style = "bootstrap4",
+      rownames = TRUE,
+      options = list(
+        responsive = TRUE,
+        scrollX = TRUE,
+        columnDefs = list(
+          list(className = "dt-center", targets = 1:ncol(chosenData()$data))
+        )
+      )
+    )
+    ### Data info
+    output$dataTableInfo <- renderText({
+      chosenData()$info
+    })
+
+    ### Variable explanation
+    output$dataTableVariables <- renderText({
+      chosenData()$variables
+    })
+
+    ### Update variable selection
+    if (input$theDataSet == "Iris") {
+      updateSelectInput(
+        session = session,
+        inputId = "theVariable",
+        choices = list('Sepal.Length', 'Species')
+      )
+    } else if (input$theDataSet == "Palmer Penguins") {
+      updateSelectInput(
+        session = session,
+        inputId = "theVariable",
+        choices = list('species','island', 'body_mass_g', 'sex')
+      )
+    } else if (input$theDataSet == "Marketing") {
+      updateSelectInput(
+        session = session,
+        inputId = "theVariable",
+        choices = list('youtube', 'sales')
+      )
+    } else if (input$theDataSet == "Heart Disease") {
+      updateSelectInput(
+        session = session,
+        inputId = "theVariable",
+        choices = list('sex', 'trestbps', 'target')
+      )
     }
   })
-  ####### This changes what methods can be used after the variable selected changes
-  #----Variable Selected changes observeEvent(input$theVariable), changes methods available----
-  observeEvent(input$theVariable, { 
-    if(input$theVariable == "Sepal.Length")
-    {
-      updateSelectInput(session, inputId = "theMethod", label = NULL,
-                        choices = list("Multiple Linear Regression"))
+
+  ## Change method depending on selected variable ----
+  observeEvent(input$theVariable, {
+    if (input$theVariable %in% c("Sepal.Length", "body_mass_g", "trestbps")) {
+      updateSelectInput(
+        session = session,
+        inputId = "theMethod",
+        choices = list("Multiple Linear Regression")
+      )
+    } else if (input$theVariable %in% c("Species", "species", "island")) {
+      updateSelectInput(
+        session = session,
+        inputId = "theMethod",
+        choices = list("Linear Discriminant Analysis")
+      )
+    } else if (input$theVariable %in% c("sex", "target")) {
+      updateSelectInput(
+        session = session,
+        inputId = "theMethod",
+        choices = list("Linear Discriminant Analysis", "Logistic Regression")
+      )
+    } else if (input$theVariable %in% c("youtube", "sales")) {
+      updateSelectInput(
+        session = session,
+        inputId = "theMethod",
+        choices = list("Multiple Linear Regression", "Ridge Regression", "LASSO")
+      )
     }
-    else if(input$theVariable == "Species")
-    {
-      updateSelectInput(session, inputId = "theMethod", label = NULL,
-                        choices = list("Linear Discriminant Analysis"))
-    }
-    else if(input$theVariable == "species")
-    {
-      updateSelectInput(session, inputId = "theMethod", label = NULL,
-                        choices = list("Linear Discriminant Analysis"))
-    }
-    else if(input$theVariable == "island")
-    {
-      updateSelectInput(session, inputId = "theMethod", label = NULL,
-                        choices = list("Linear Discriminant Analysis"))
-    }
-    else if(input$theVariable == "body_mass_g")
-    {
-      updateSelectInput(session, inputId = "theMethod", label = NULL,
-                        choices = list("Multiple Linear Regression"))
-    }
-    else if(input$theVariable == "sex")
-    {
-      updateSelectInput(session, inputId = "theMethod", label = NULL,
-                        choices = list("Linear Discriminant Analysis","Logistic Regression"))
-    }
-    else if(input$theVariable == "youtube")
-    {
-      updateSelectInput(session, inputId = "theMethod", label = NULL,
-                        choices = list("Multiple Linear Regression", "Ridge Regression", "LASSO"))
-    }
-    else if(input$theVariable == "sales")
-    {
-      updateSelectInput(session, inputId = "theMethod", label = NULL,
-                        choices = list("Multiple Linear Regression", "Ridge Regression", "LASSO"))
-    }
-    else if(input$theVariable == "target")
-    {
-      updateSelectInput(session, inputId = "theMethod", label = NULL,
-                        choices = list("Logistic Regression","Linear Discriminant Analysis"))
-    }
-    else if(input$theVariable == "trestbps")
-    {
-      updateSelectInput(session, inputId = "theMethod", label = NULL,
-                        choices = list("Multiple Linear Regression"))
-    }
-    else
-    {
-      #print("test")
-    }
+
     tracking$DT <- data.frame(
       percentTraining = numeric(),
       accuracyValue = numeric()
     )
   })
-  
-  #Input: data set, the testingPercent (average .8), method used
-  #output: returns the percent accuracy of the model. 
-  #percent <- calculateAccuracy(dataset, input$testingPercent, input$theMethod, predictor, predictionVariable)
-  #----calculateAccuracy()----
-  calculateAccuracy <- function(theDataSet, testingPercent, method, predictor, predictionVariable) #predictor replaces theDataSet$Species, preictionVariable is just 'variableString'
-  {
-    validation_index <- createDataPartition(y = predictor, p = testingPercent, list = FALSE) #p usually input$testingPercent
-    #dataset <- dataset(na.action=na.exclude)
-    validation <- theDataSet[-validation_index,]
-    
-    trainingDataset <- theDataSet[validation_index,]
-    sapply(trainingDataset,class)
-    
-    if(method == 'Linear Discriminant Analysis') {
-      fit.lda <- lda(eval(parse(text = paste(predictionVariable,'~.'))), data=trainingDataset, na.action="na.omit")
-      predictions <- predict(object = fit.lda, newdata = validation)
-      finalPredictions <- predictions$class
-      outputType <- "categorical"
-    }
-    else if(method == 'Multiple Linear Regression')
-    {
-      fit.lm <- lm(eval(parse(text = paste(predictionVariable, '~.'))), data = trainingDataset)
-      finalPredictions <- predict(fit.lm, validation)
-      outputType <- "continuous"
-    }
-    else if(method == 'Logistic Regression'){
-      fit.lr <- glm(eval(parse(text = paste(predictionVariable, '~.'))), data = trainingDataset, family = "binomial")
-      probabilities <- predict(fit.lr, validation, type = "response")
-      if(predictionVariable ==  "sex")
-        finalPredictions <- ifelse(probabilities < 0.5, "female", "male")
-      else if(predictionVariable == "target"){
-        finalPredictions <- ifelse(probabilities > 0.5, 1, 0) #1 unhealthy and 2 healthy
-      }
-      else
-        print("")
-      #fit.lr <- glm(target ~ ., data = trainingDataset, family = "binomial")
-      #probabilities <- predict(fit.lr, validation, type = "response")
-      #finalPredictions <- ifelse(probabilities > 0.5, "Unhealthy", "Healthy")
-      outputType <- "categorical"
-    }
-    else if(method == "Ridge Regression")
-    {
-      #x <- model.matrix( ~ ., trainingDataset)
-      x <- as.matrix(trainingDataset[, names(trainingDataset) != predictionVariable])
-      y <- as.matrix(trainingDataset[, predictionVariable])
-      
-      fit.glm <- glmnet(x, y, family="gaussian", alpha=0, lambda=0.001)
-      finalPredictions <- predict(fit.glm, data.matrix(validation[, names(trainingDataset) != predictionVariable]), type = "response") #type used to = "link"
-      outputType <- "continuous"
-    }
-    else if(method == "LASSO")
-    {
-      # fit model
-      #print(theDataSet[,1:3])
-      x <- data.matrix(trainingDataset[, names(trainingDataset) != predictionVariable])
-      y <- data.matrix(trainingDataset[, predictionVariable])
-      fit.lars <- lars(x, y, type="lasso")
-      # select a step with a minimum error
-      best_step <- fit.lars$df[which.min(fit.lars$RSS)]
-      # make predictions
-      finalPredictions <- predict(fit.lars, data.matrix(validation[,names(trainingDataset) != predictionVariable]), s=best_step, type="fit")$fit
-      outputType <- "continuous"
-    }
-    else
-    {
-      
-    }
-    
-    #6 Make predictions
-    #Estimate accuracy of LDA on validation dataset
-    if(outputType == "categorical")
-    {
-      count <- 0
-      correct <- 0
-      for(word in finalPredictions)
-      {
-        count <- count + 1
-        if(word == eval(parse(text= paste('validation$',predictionVariable,'[',count,']'))))
-          correct <- correct + 1
-      }
-      percentCorrect <- correct / count
-      percentCorrect <- percentCorrect * 100
-      return(percentCorrect)
-    }
-    else #For continuous
-    {
-      count <- 0
-      MSE <- 0
-      for(number in finalPredictions)
-      {
-        count <- count + 1
-        MSE = MSE + ((number - eval(parse(text= paste('validation$',predictionVariable,'[',count,']'))))^2)
-      }
-      MSE <- MSE / count
-      return(MSE)
-    }
-  }
-  #----Ouput runTest 1 accuracy function----
-  observeEvent(input$runTest,{
-    #print('submit detected')
-    if(input$theDataSet == 'Iris'){
-      dataset <- iris
-      predictor <- iris$Species      #predictor is the variable that we are going to try to predict based off training data algorithm testing the validation algorithm
-      predictionVariable <- input$theVariable
-    }
-    else if(input$theDataSet == 'Marketing')
-    {
-      dataset <- read.csv("marketing.csv")
-      predictor <- dataset$sales
-      predictionVariable <- input$theVariable
-    }
-    else if(input$theDataSet == 'Palmer Penguins'){
-      dataset <- na.omit(penguins)
-      predictor <- dataset$species
-      predictionVariable <- input$theVariable
-    }
-    # else if(input$theDataSet == "House Data"){
-    #   #dataset <- read.csv("HouseTrain.csv")
-    #   dataset <- read.csv("Reduced_HouseTrain.csv")
-    #   predictor <- dataset$SalePrice
-    #   predictionVariable <- 'SalePrice'
-    # }
-    else if(input$theDataSet == "Heart Disease")
-    {
-      #https://www.youtube.com/watch?v=C4N3_XJJ-jU was important
-      #undid a lot of as.factors
-      dataset <- read.csv("HeartDiseaseData.csv")
-      #Cleaning
-      dataset[dataset == "?"] <- NA
-      dataset <- na.omit(dataset)
-      #dataset[dataset$sex == 0,]$sex <- "female"
-      #dataset[dataset$sex == 1,]$sex <- "male"
-      dataset$sex <- as.factor(dataset$sex)
-      dataset$cp <- as.factor(dataset$cp)
-      dataset$fbs <- as.factor(dataset$fbs)
-      dataset$exang <- as.factor(dataset$exang)
-      dataset$slope <- as.factor(dataset$slope)
-      # dataset$ca <- as.integer(dataset$ca)
-      # dataset$ca <- as.factor(dataset$ca)
-      dataset$thal <- as.integer(dataset$thal) # "thal" also had "?"s in it.
-      dataset$thal <- as.factor(dataset$thal)
-      ## This next line replaces 0 and 1 with "Healthy" and "Unhealthy"
-      #dataset$target <- ifelse(test=dataset$target == 0, yes="Healthy", no="Unhealthy") #I might remove
-      dataset$target <- as.factor(dataset$target) # Now convert to a factor
-      predictor <- dataset$target
-      predictionVariable <- input$theVariable
-    }
-    else{
-      #print('ERROR')
-    }
-    percentCorrect <- calculateAccuracy(dataset, input$testingPercent, input$theMethod, predictor, predictionVariable)
-    percentCorrect <- signif(percentCorrect,4) #
-    if(input$theMethod == "Linear Discriminant Analysis" || input$theMethod == "Logistic Regression")
-      output$accuracyResult <- renderText({paste(percentCorrect,' ', 'Percent is the accuracy when the percent of training data is',isolate(input$testingPercent))})
-    else
-      output$accuracyResult <- renderText({paste(percentCorrect,' ', ' is the mean sum of squares',isolate(input$testingPercent))})
-  })
-  
-  #Outputs the graph
-  #----OutputGraphFunction----
-  observeEvent(input$outputGraph, {
-    if(input$theDataSet == 'Iris'){
-      dataset <- na.omit(iris)
-      predictor <- iris$Species      #predictor is the variable that we are going to try to predict based off training data algorithm testing the validation algorithm
-      #print(predictor)
-      #print("End of first output of predictor")
-      predictionVariable <- input$theVariable
-      #outputType <- "categorical"
-    }
-    else if(input$theDataSet == 'Marketing')
-    {
-      dataset <- read.csv("marketing.csv")
-      predictor <- dataset$sales
-      predictionVariable <- input$theVariable
-      #outputType <- "continuous"
-    }
-    else if(input$theDataSet == "Heart Disease")
-    {
-      #https://www.youtube.com/watch?v=C4N3_XJJ-jU was important
-      dataset <- read.csv("HeartDiseaseData.csv")
-      #Cleaning
-      dataset[dataset == "?"] <- NA
-      dataset <- na.omit(dataset)
-      dataset[dataset$sex == 0,]$sex <- "female"
-      dataset[dataset$sex == 1,]$sex <- "male"
-      dataset$sex <- as.factor(dataset$sex)
-      dataset$cp <- as.factor(dataset$cp)
-      dataset$fbs <- as.factor(dataset$fbs)
-      dataset$restecg <- as.factor(dataset$restecg)
-      dataset$exang <- as.factor(dataset$exang)
-      dataset$slope <- as.factor(dataset$slope)
-      dataset$ca <- as.integer(dataset$ca)
-      dataset$ca <- as.factor(dataset$ca)
-      dataset$thal <- as.integer(dataset$thal) # "thal" also had "?"s in it.
-      dataset$thal <- as.factor(dataset$thal)
-      ## This next line replaces 0 and 1 with "Healthy" and "Unhealthy"
-      #dataset$target <- ifelse(test=dataset$target == 0, yes="Healthy", no="Unhealthy") #I might remove
-      dataset$target <- as.factor(dataset$target) # Now convert to a factor
-      predictor <- dataset$target
-      predictionVariable <- input$theVariable
-    }
-    else if(input$theDataSet == 'Palmer Penguins'){
-      dataset <- na.omit(penguins)
-      predictor <- dataset$species
-      predictionVariable <- input$theVariable
-      #outputType <- "categorical"
-    }
-    else if(input$theDataSet == "House Data"){
-      dataset <- read.csv("HouseTrain.csv")
-      predictor <- dataset$SalePrice
-      predictionVariable <- input$theVariable
-      #outputType <- "categorical"
-    }
-    else{
-      print('ERROR')
-    }
-    
-    trainingPercents <-.5
-    count <- 1
-    testingPercent <- list(.5,.55,.6,.65,.7,.75,.8,.85,.9,.95)
-    newAverages <- list(0,0,0,0,0,0,0,0,0,0)
-    totalRuns <- as.numeric(input$repetitions)
-    count <- 1
-    #As the probability is being calculated these lists store the values from each test and sort them by percent in training data 
-    #  so for instance consistency70 is 70% training data and 30% validation data
-    consistency50 <- vector(mode = "list", length = totalRuns)
-    consistency55 <- vector(mode = "list", length = totalRuns)
-    consistency60 <- vector(mode = "list", length = totalRuns)
-    consistency65 <- vector(mode = "list", length = totalRuns)
-    consistency70 <- vector(mode = "list", length = totalRuns)
-    consistency75 <- vector(mode = "list", length = totalRuns)
-    consistency80 <- vector(mode = "list", length = totalRuns)
-    consistency85 <- vector(mode = "list", length = totalRuns)
-    consistency90 <- vector(mode = "list", length = totalRuns)
-    consistency95 <- vector(mode = "list", length = totalRuns)
-    count <- 1
-    #Each run calculates 1 accuracy for each of the 10 training prportions
-    #  It runs as many times as totalRuns
-    while(count <= totalRuns)
-    {
-      percentCorrectCalculation <- lapply(X = testingPercent, FUN = calculateAccuracy, theDataSet = dataset, method = input$theMethod, predictor = predictor, predictionVariable = predictionVariable) #Ethan
-      consistency50[count] <- percentCorrectCalculation[[1]]
-      consistency55[count] <- percentCorrectCalculation[[2]]
-      consistency60[count] <- percentCorrectCalculation[[3]]
-      consistency65[count] <- percentCorrectCalculation[[4]]
-      consistency70[count] <- percentCorrectCalculation[[5]]
-      consistency75[count] <- percentCorrectCalculation[[6]]
-      consistency80[count] <- percentCorrectCalculation[[7]]
-      consistency85[count] <- percentCorrectCalculation[[8]]
-      consistency90[count] <- percentCorrectCalculation[[9]]
-      consistency95[count] <- percentCorrectCalculation[[10]]
-      newAverages <- list(newAverages[[1]] + percentCorrectCalculation[[1]], newAverages[[2]] + percentCorrectCalculation[[2]], newAverages[[3]] + percentCorrectCalculation[[3]],
-                          newAverages[[4]] + percentCorrectCalculation[[4]], newAverages[[5]] + percentCorrectCalculation[[5]], newAverages[[6]] + percentCorrectCalculation[[6]],
-                          newAverages[[7]] + percentCorrectCalculation[[7]], newAverages[[8]] + percentCorrectCalculation[[8]], newAverages[[9]] + percentCorrectCalculation[[9]],
-                          newAverages[[10]] + percentCorrectCalculation[[10]])
-      count <- count + 1
-    }
-    percentCorrectCalculation <- list(newAverages[[1]] / totalRuns, newAverages[[2]] / totalRuns, newAverages[[3]] / totalRuns, 
-                                      newAverages[[4]] / totalRuns, newAverages[[5]] / totalRuns, newAverages[[6]] / totalRuns, 
-                                      newAverages[[7]] / totalRuns, newAverages[[8]] / totalRuns, newAverages[[9]] / totalRuns,
-                                      newAverages[[10]] / totalRuns)
-    
-    #######Section to Calculate standard deviation
-    #Used to contain these inside the 2 different if else below but don't beleive that is necessary
-    stdev = list(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-    #The size of each consistency## is equal to the size of the totalRuns
-    stdev[[1]] <- sd(unlist(x = consistency50, recursive = TRUE, use.names = TRUE), na.rm = TRUE)
-    stdev[[2]] <- sd(unlist(x = consistency55, recursive = TRUE, use.names = TRUE), na.rm = TRUE)
-    stdev[[3]] <- sd(unlist(x = consistency60, recursive = TRUE, use.names = TRUE), na.rm = TRUE)
-    stdev[[4]] <- sd(unlist(x = consistency65, recursive = TRUE, use.names = TRUE), na.rm = TRUE)
-    stdev[[5]] <- sd(unlist(x = consistency70, recursive = TRUE, use.names = TRUE), na.rm = TRUE)
-    stdev[[6]] <- sd(unlist(x = consistency75, recursive = TRUE, use.names = TRUE), na.rm = TRUE)
-    stdev[[7]] <- sd(unlist(x = consistency80, recursive = TRUE, use.names = TRUE), na.rm = TRUE)
-    stdev[[8]] <- sd(unlist(x = consistency85, recursive = TRUE, use.names = TRUE), na.rm = TRUE)
-    stdev[[9]] <- sd(unlist(x = consistency90, recursive = TRUE, use.names = TRUE), na.rm = TRUE)
-    stdev[[10]] <- sd(unlist(x = consistency95, recursive = TRUE, use.names = TRUE), na.rm = TRUE)
-    
-    #Output the plots
-    #Categorical
-    if(input$theMethod == "Linear Discriminant Analysis" || input$theMethod == "Logistic Regression")
-    {
-      accuracyDataFrame <- do.call(rbind, Map(data.frame, testingPercent = testingPercent, percentCorrectCalculation = percentCorrectCalculation))
-      
-      output$overallPlot <- renderPlot({ggplot(data = accuracyDataFrame, aes(testingPercent * 100, percentCorrectCalculation)) +
-          xlab("Percent In Training Set") +
-          ylab("Percent Correct") +
-          theme(text = element_text(size=20)) +
-          geom_point(alpha = 0.25) +
-          stat_smooth(method = "lm", formula = y ~ poly(x, 3), size = 1, se = FALSE)
-      })
-      
-      resultsDataFrame <- do.call(rbind, Map(data.frame, testingPercent = testingPercent, stdev = stdev))
-      
-      output$consistencyPlot <- renderPlot({ggplot(data = resultsDataFrame, aes(testingPercent * 100, stdev)) +
-          xlab("Percent In Training Set") +
-          ylab("Standard deviation of Percent Correct") +
-          theme(text = element_text(size=20)) +
-          geom_point(alpha = 0.25) +
-          stat_smooth(method = "lm", formula = y ~ poly(x, 3), size = 1, se = FALSE)
-      })
-    }
-    else #quantitative
-    {
-      accuracyDataFrame <- do.call(rbind, Map(data.frame, testingPercent = testingPercent, percentCorrectCalculation = percentCorrectCalculation))
-      
-      output$overallPlot <- renderPlot({ggplot(data = accuracyDataFrame, aes(testingPercent * 100, percentCorrectCalculation)) +
-          xlab("Percent In Training Set") +
-          ylab("MSE of the Distance From True Answer") +
-          theme(text = element_text(size=20)) +
-          geom_point(alpha = 0.25) +
-          stat_smooth(method = "lm", formula = y ~ poly(x, 3), size = 1, se = FALSE)
-      })
-      
-      #STD deviation
-      resultsDataFrame <- do.call(rbind, Map(data.frame, testingPercent = testingPercent, stdev = stdev))
-      
-      output$consistencyPlot <- renderPlot({ggplot(data = resultsDataFrame, aes(testingPercent * 100, stdev)) +
-          xlab("Percent In Training Set") +
-          ylab("St Dev of the absolute distance") +
-          geom_point() +
-          theme(text = element_text(size=20)) +
-          stat_smooth(method = "lm", formula = y ~ poly(x, 3), size = 1, se = FALSE)
-        #+ lines(aes(testingPercent, predict(quadraticRegression), col = 2))
-      })
-    }
-  })
-  
-  
-  
-  
-  #----observeEvent(input$newGraphOutput)----
+
+  ## Run Method button ----
   observeEvent(input$newGraphOutput, {
-    
-    if(input$theDataSet == 'Iris'){
-      dataset <- na.omit(iris)
+    if (input$theDataSet == 'Iris') {
+      dataset <- na.omit(chosenData()$data)
       #predictor is the variable that we are going to try to predict
       predictor <- iris$Species
       predictionVariable <- input$theVariable
       #outputType <- "categorical"
-    }
-    else if(input$theDataSet == 'Marketing')
-    {
-      dataset <- read.csv("marketing.csv")
+    } else if (input$theDataSet == 'Marketing') {
+      dataset <- na.omit(chosenData()$data)
       predictor <- dataset$sales
       predictionVariable <- input$theVariable
       #outputType <- "continuous"
-    }
-    else if(input$theDataSet == "Heart Disease")
-    {
+    } else if (input$theDataSet == "Heart Disease") {
       #https://www.youtube.com/watch?v=C4N3_XJJ-jU was important
-      dataset <- read.csv("HeartDiseaseData.csv")
-      
+      dataset <- chosenData()$data
       #Cleaning
       dataset[dataset == "?"] <- NA
       dataset <- na.omit(dataset)
@@ -940,46 +711,51 @@ server <- function(input, output, session) {
       dataset$target <- as.factor(dataset$target) # Now convert to a factor
       predictor <- dataset$target
       predictionVariable <- input$theVariable
-    }
-    else if(input$theDataSet == 'Palmer Penguins'){
-      dataset <- na.omit(penguins)
+    } else if (input$theDataSet == 'Palmer Penguins') {
+      dataset <- na.omit(chosenData()$data)
       predictor <- dataset$species
       predictionVariable <- input$theVariable
       #outputType <- "categorical"
     }
-    else if(input$theDataSet == "House Data"){
-      dataset <- read.csv("HouseTrain.csv")
-      predictor <- dataset$SalePrice
-      predictionVariable <- input$theVariable
-      #outputType <- "categorical"
-    }
-    else{
-      print('ERROR')
-    }
-    
-    
-    
+    # Future development?
+    # else if(input$theDataSet == "House Data"){
+    #   dataset <- read.csv("HouseTrain.csv")
+    #   predictor <- dataset$SalePrice
+    #   predictionVariable <- input$theVariable
+    #   #outputType <- "categorical"
+    # } else {
+    #   print('ERROR')
+    # }
+
     #consistency50 <- vector(mode = "list", length = totalRuns)
     count <- 1
     totalRuns <- as.numeric(input$repetitions)
-    
-    while(count <= totalRuns)
-    {
-      percentCorrect <- calculateAccuracy(dataset, input$testingPercent, input$theMethod, predictor, predictionVariable)
+
+    while (count <= totalRuns) {
+      percentCorrect <- calculateAccuracy(
+        dataset,
+        input$testingPercent,
+        input$theMethod,
+        predictor,
+        predictionVariable
+      )
       percentCorrect <- signif(percentCorrect,4)
       currentPoints <- data.frame(
         percentTraining = input$testingPercent,
         accuracyValue = percentCorrect
       )
-      
-      count <- count+1
+
+      count <- count + 1
       ###---- Store new values ----
       tracking$DT <- rbind(tracking$DT, currentPoints)
     }
   })
-  
+
   basePerformPlot <- ggplot(
-    data = data.frame(x = seq(from = 0.2, to = 1), y = seq(from = 0, to = 1)),
+    data = data.frame(
+      x = seq(from = 0.2, to = 1),
+      y = seq(from = 0, to = 1)
+    ),
     mapping = aes(x = x, y = y)
   ) +
     theme_bw() +
@@ -989,12 +765,18 @@ server <- function(input, output, session) {
     theme(
       text = element_text(size = 18)
     ) +
-    scale_x_continuous(limits = c(.2, 1), expand = expansion(mult = 0.01, add = 0)) +
-    scale_y_continuous(limits = c(100, 550), expand = expansion(mult = 0.01, add = 0), labels = scaleFUN)
-  
+    scale_x_continuous(
+      limits = c(.2, 1),
+      expand = expansion(mult = 0.01, add = 0)
+    )
+
   output$variancePlot <- renderPlot({
     basePerformPlot +
-      scale_y_continuous(limits = c(minYAxis(), maxYAxis(), expand = expansion(mult = 0.01, add = 0)), labels = scaleFUN) +
+      scale_y_continuous(
+        limits = c(minYAxis(), maxYAxis()),
+        expand = expansion(mult = 0.05, add = 0),
+        labels = scaleFUN
+      ) +
       geom_point(
         data = tracking$DT,
         alpha = 0.33,
@@ -1010,7 +792,7 @@ server <- function(input, output, session) {
       )
     #geom_errorbar(stat="summary", fun.data="mean_se", fun.args = list(mult = 1.96))
   })
-  
+
   output$AccuracyPlot <- renderPlot({
     #Compute the average of the points at each location X
     subset20 <- mean(subset(tracking$DT, (percentTraining == .2))$accuracyValue)
@@ -1036,7 +818,10 @@ server <- function(input, output, session) {
     percents <- c(.2, .25, .3, .35, .4, .45, .5, .55, .6, .65, .7, .75, .8, .85, .9, .95)
     meanPoints <- data.frame(averagesList, percents)
     meanPoints <- subset(meanPoints, (averagesList != 'NaN'))
-    ggplot(data = meanPoints, aes(x = percents, y = averagesList)) +
+    ggplot(
+      data = meanPoints,
+      mapping = aes(x = percents, y = averagesList)
+    ) +
       geom_point(
         data = meanPoints,
         mapping = aes(
@@ -1047,16 +832,23 @@ server <- function(input, output, session) {
       ) +
       theme_bw() +
       theme(
-        text = element_text(size = 18),
+        text = element_text(size = 18)
       ) +
       xlab("Proportion in Training Set") +
-      ylab(paste('Mean of the', yLabel())) +
+      ylab(paste('Mean', yLabel())) +
       labs(title = "Mean Accuracy") +
       stat_smooth(method = "lm", formula = y ~ poly(x, 1), size = 1, se = FALSE) +
-      scale_y_continuous(limits = c(meanMinYAxis(), meanMaxYAxis(), expand = expansion(mult = 0.01, add = 0)), labels = scaleFUN) +
-      scale_x_continuous(limits = c(.2, 1))
+      scale_y_continuous(
+        limits = c(meanMinYAxis(), meanMaxYAxis()),
+        expand = expansion(mult = 0.05, add = 0),
+        labels = scaleFUN
+      ) +
+      scale_x_continuous(
+        limits = c(.2, 1),
+        expand = expansion(mult = 0.01, add = 0)
+      )
   })
 }
 
-shinyApp(ui = ui, server = server)
-#boastUtils::boastApp(ui = ui, server = server)
+# Boast App Call ----
+boastUtils::boastApp(ui = ui, server = server)
