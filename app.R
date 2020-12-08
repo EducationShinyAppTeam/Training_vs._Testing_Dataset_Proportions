@@ -53,7 +53,7 @@ ui <- list(
     skin = "blue",
     ### Create the app header
     dashboardHeader(
-      title = "Validation vs Testing", # You may use a shortened form of the title here
+      title = "Training vs Testing", # You may use a shortened form of the title here
       tags$li(class = "dropdown",
               tags$a(href='https://pennstate.qualtrics.com/jfe/form/SV_7TLIkFtJEJ7fEPz?appName=Validation_vs_Testing',
                      icon("comments"))),
@@ -91,7 +91,7 @@ ui <- list(
             is affected by the proportion of the cases in the training dataset vs the testing dataset.
             As you go pay attention to how the accuracy of the data along with the standard 
             deviation increases and decreases.'),
-          p('MSS: Mean Sum of Squares. This is used often for statistics and here is used to measure how far off a prediction is from the true value. The formula is \\(\\sum_{i=1}^n (x_i- \\bar x )^2\\)'),
+          p('MSE: Mean Square Error. This is used often for statistics and here is used to measure how far off a prediction is from the true value. The formula is \\(\\sum_{i=1}^n (x_i- \\bar x )^2\\) *fix this'),
           
           #helpText('$$\sum_{i=1}^n a_n$$'),
           #withMathJax('$$\sum_{i=1}^n a_n$$'),
@@ -102,6 +102,7 @@ ui <- list(
           tabName = "overview",
           withMathJax(),
           h1("Training vs Testing "), # This should be the full name.
+          p("This app teaches students about the tradeoffs when choosing how high the proportion of training data should be."),
           h2("Instructions"),
           tags$ol(
             tags$li("Check over the prerequisites."),
@@ -137,74 +138,42 @@ ui <- list(
         tabItem(
           tabName = "expl",
           withMathJax(),
-          h1("Explore Testing Proportion"),
-          t("The normal amount of training data set vs testing data set is"),
-          t("80% training and 20% test set."),
-          br(), br(),
-          wellPanel(
-          fluidRow(
-            column(2,
-                   selectInput(inputId = 'theDataSet', label = 'Dataset', choices = list('Heart Disease', 'Palmer Penguins', 'Marketing','Iris'), selected = 'Heart Disease'),
-                   selectInput(inputId = 'theVariable', label = 'Variable to predict', choices = list('Species', 'Sepal.Length', 'Sepal.Width', 'Petal.Length', 'Petal.Width'), selected = 'Species'),
-                   ),
-            column(4,
-                   textOutput("dataTableInfo"), #Gives basic info on dataset
-                   box(
-                     title = strong("Display Dataset"),
-                     status = "primary",
-                     collapsible = TRUE,
-                     collapsed = TRUE,
-                     width = '100%',
+          tabsetPanel(
+            tabPanel("Exploration",
+              h1("Explore Testing Proportion"),
+              br(), br(),
+              fluidRow(
+                column(5,
+                       wellPanel(
+                       selectInput(inputId = 'theDataSet', label = 'Dataset', choices = list('Heart Disease', 'Palmer Penguins', 'Marketing','Iris'), selected = 'Heart Disease'),
+                       selectInput(inputId = 'theVariable', label = 'Variable to predict', choices = list('Species', 'Sepal.Length', 'Sepal.Width', 'Petal.Length', 'Petal.Width'), selected = 'Species'),
+                       uiOutput("dataTableVariables"),
+                       selectInput(inputId = 'theMethod', label = 'Method', 
+                                   choices = list('Linear Discriminant Analysis',
+                                                  'Multiple Linear Regression','Logistic Regression',
+                                                  'Ridge Regression', 'LASSO'), 
+                                   selected = 'Linear Discriminant Analysis'),
+                       selectInput(inputId = 'repetitions', label = 'Number of repititions at each value',
+                                   choices = list(5,10,20,30,40,50,70,100),
+                                   selected = 20),
+                       #actionButton('runTest', 'Test Accuracy'),
+                       sliderInput('testingPercent','Percent tester',
+                                   min = .2, max = .95, value = .80, step = .05),
+                       actionButton('newGraphOutput', 'Add Points to Graph'),
+                       
+                       textOutput('accuracyResult'),
+                       )
+                ),
+                column(7,
+                       plotOutput(outputId = "variancePlot", width = "100%"),
+                       plotOutput(outputId = "AccuracyPlot", width = "100%"),
+                       ),
+                
+              ),
+              ),
+            tabPanel("The Dataset",
                      DT::dataTableOutput("dataTable") #Shows first 10 cases in table
-                   )),
-            column(6,
-                   box(
-                     title = strong("Variable Information"),
-                     status = "primary",
-                     collapsible = TRUE,
-                     collapsed = TRUE,
-                     width = '100%',
-                     uiOutput("dataTableVariables")
-                   )),
-                  
-                  )
-          ),
-          
-          #This stores and hides the dataset and the extra information the user may be interested in. 
-          br(),
-          br(),
-          br(),
-          
-          
-          fluidRow(
-            column(4,
-                   wellPanel(
-                   selectInput(inputId = 'theMethod', label = 'Method', 
-                               choices = list('Linear Discriminant Analysis',
-                                              'Multiple Linear Regression','Logistic Regression',
-                                              'Ridge Regression', 'LASSO'), 
-                               selected = 'Linear Discriminant Analysis'),
-                   #Ethan 10/1
-                   selectInput(inputId = 'repetitions', label = 'Number of repititions at each value',
-                               choices = list(5,10,20,30,40,50,70,100),
-                               selected = 20),
-                   #actionButton('runTest', 'Test Accuracy'),
-                   actionButton('newGraphOutput', 'Add Points to Graph'),
-                   sliderInput('testingPercent','Percent tester',
-                               min = .2, max = .95, value = .80, step = .05),
-                   textOutput('accuracyResult'))),
-                   #textOutput('results')),
-            column(8,
-                   #actionButton('outputGraph','Output Graph'),
-                   #plotOutput('overallPlot')
-                   #br(),
-                   #plotOutput('consistencyPlot')
-                   plotOutput(outputId = "variancePlot", width = "100%"),
-                   br(),
-                   br(),
-                   br(),
-                   plotOutput(outputId = "AccuracyPlot", width = "100%")
-                   ),
+            )
           ),
           
         ),
@@ -250,17 +219,65 @@ server <- function(input, output, session) {
     yLabel <- input$theVariable
     if(input$theVariable == "Species" || input$theVariable == "species" || input$theVariable == "island" || input$theVariable == "sex" || input$theVariable == "target")
     {
-      yLabel <- "% of Correct Predictions"
+      yLabel <- "Percentage of Correct Predictions"
     }
     else
     {
-     yLabel <- "The MSS of the error (so lower the better)"
+     yLabel <- "MSE (so lower the better)"
     }
     yLabel
   })
-
+  
+  maxYAxis <- reactive({
+    if(input$theVariable == "Sepal.Length")
+    {
+      maxYAxis <- .2
+    }
+    else if(input$theVariable == "Species")
+    {
+      maxYAxis <- .95
+    }
+    else if(input$theVariable == "species")
+    {
+      maxYAxis <-100
+    }
+    else if(input$theVariable == "island")
+    {
+      maxYAxis <-75
+    }
+    else if(input$theVariable == "body_mass_g")
+    {
+      maxYAxis <-120000
+    }
+    else if(input$theVariable == "sex")
+    {
+      maxYAxis <-100
+    }
+    else if(input$theVariable == "youtube")
+    {
+      maxYAxis <-4000
+    }
+    else if(input$theVariable == "sales")
+    {
+      maxYAxis <-20
+    }
+    else if(input$theVariable == "target")
+    {
+      maxYAxis <-90
+    }
+    else if(input$theVariable == "trestbps")
+    {
+      maxYAxis <-400
+    }
+    else
+    {
+      #print("test")
+    }
+  })
+  
   minYAxis <- reactive({
     var <- input$theVariable
+    
     if(input$theVariable == "Sepal.Length")
     {
       minYAxis <-0
@@ -295,18 +312,18 @@ server <- function(input, output, session) {
     }
     else if(input$theVariable == "target")
     {
-      minYAxis <-40
+      minYAxis <-55
     }
     else if(input$theVariable == "trestbps")
     {
-      minYAxis <-0
+      minYAxis <-150
     }
     else
     {
       #print("test")
     }
   })
-  maxYAxis <- reactive({
+  meanMaxYAxis <- reactive({
     if(input$theVariable == "Sepal.Length")
     {
       maxYAxis <- .2
@@ -321,37 +338,85 @@ server <- function(input, output, session) {
     }
     else if(input$theVariable == "island")
     {
-      maxYAxis <-100
+      maxYAxis <-75
     }
     else if(input$theVariable == "body_mass_g")
     {
-      maxYAxis <-110000
+      maxYAxis <-100000
     }
     else if(input$theVariable == "sex")
     {
-      maxYAxis <-90
+      maxYAxis <-100
     }
     else if(input$theVariable == "youtube")
     {
-      maxYAxis <-4000
+      maxYAxis <-2000
     }
     else if(input$theVariable == "sales")
     {
-      maxYAxis <-20
+      maxYAxis <-6
     }
     else if(input$theVariable == "target")
     {
-      maxYAxis <-100
+      maxYAxis <-85
     }
     else if(input$theVariable == "trestbps")
     {
-      maxYAxis <-600
+      maxYAxis <-400
     }
     else
     {
       #print("test")
     }
   })
+  meanMinYAxis <- reactive({
+    var <- input$theVariable
+    if(input$theVariable == "Sepal.Length")
+    {
+      minYAxis <- 0
+    }
+    else if(input$theVariable == "Species")
+    {
+      minYAxis <-.95
+    }
+    else if(input$theVariable == "species")
+    {
+      minYAxis <-99
+    }
+    else if(input$theVariable == "island")
+    {
+      minYAxis <-65
+    }
+    else if(input$theVariable == "body_mass_g")
+    {
+      minYAxis <-75000
+    }
+    else if(input$theVariable == "sex")
+    {
+      minYAxis <-64
+    }
+    else if(input$theVariable == "youtube")
+    {
+      minYAxis <-1400
+    }
+    else if(input$theVariable == "sales")
+    {
+      minYAxis <-3
+    }
+    else if(input$theVariable == "target")
+    {
+      minYAxis <-75
+    }
+    else if(input$theVariable == "trestbps")
+    {
+      minYAxis <-250
+    }
+    else
+    {
+      #print("test")
+    }
+  })
+  
 
   
 ####### This changes what variables can be picked after the dataset selected changes
@@ -607,14 +672,14 @@ server <- function(input, output, session) {
     else #For continuous
     {
       count <- 0
-      MSS <- 0
+      MSE <- 0
       for(number in finalPredictions)
       {
         count <- count + 1
-        MSS = MSS + ((number - eval(parse(text= paste('validation$',predictionVariable,'[',count,']'))))^2)
+        MSE = MSE + ((number - eval(parse(text= paste('validation$',predictionVariable,'[',count,']'))))^2)
       }
-      MSS <- MSS / count
-      return(MSS)
+      MSE <- MSE / count
+      return(MSE)
     }
   }
   #----Ouput runTest 1 accuracy function----
@@ -674,7 +739,7 @@ server <- function(input, output, session) {
     percentCorrect <- calculateAccuracy(dataset, input$testingPercent, input$theMethod, predictor, predictionVariable)
     percentCorrect <- signif(percentCorrect,4) #
     if(input$theMethod == "Linear Discriminant Analysis" || input$theMethod == "Logistic Regression")
-      output$accuracyResult <- renderText({paste(percentCorrect,' ', '% is the accuracy when the percent of training data is',isolate(input$testingPercent))})
+      output$accuracyResult <- renderText({paste(percentCorrect,' ', 'Percent is the accuracy when the percent of training data is',isolate(input$testingPercent))})
     else
       output$accuracyResult <- renderText({paste(percentCorrect,' ', ' is the mean sum of squares',isolate(input$testingPercent))})
    })
@@ -814,7 +879,7 @@ server <- function(input, output, session) {
        
         output$overallPlot <- renderPlot({ggplot(data = accuracyDataFrame, aes(testingPercent * 100, percentCorrectCalculation)) +
             xlab("Percent In Training Set") +
-            ylab("% Correct") +
+            ylab("Percent Correct") +
             theme(text = element_text(size=20)) +
             geom_point(alpha = 0.25) +
             stat_smooth(method = "lm", formula = y ~ poly(x, 3), size = 1, se = FALSE)
@@ -825,7 +890,7 @@ server <- function(input, output, session) {
         
         output$consistencyPlot <- renderPlot({ggplot(data = resultsDataFrame, aes(testingPercent * 100, stdev)) +
             xlab("Percent In Training Set") +
-            ylab("Standard deviation of % Correct") +
+            ylab("Standard deviation of Percent Correct") +
             theme(text = element_text(size=20)) +
             geom_point(alpha = 0.25) +
             stat_smooth(method = "lm", formula = y ~ poly(x, 3), size = 1, se = FALSE)
@@ -837,7 +902,7 @@ server <- function(input, output, session) {
        
        output$overallPlot <- renderPlot({ggplot(data = accuracyDataFrame, aes(testingPercent * 100, percentCorrectCalculation)) +
            xlab("Percent In Training Set") +
-           ylab("MSS of the Distance From Answer") +
+           ylab("MSE of the Distance From True Answer") +
            theme(text = element_text(size=20)) +
            geom_point(alpha = 0.25) +
            stat_smooth(method = "lm", formula = y ~ poly(x, 3), size = 1, se = FALSE)
@@ -862,7 +927,6 @@ server <- function(input, output, session) {
   
   #----observeEvent(input$newGraphOutput)----
   observeEvent(input$newGraphOutput, {
-    
     
     if(input$theDataSet == 'Iris'){
       dataset <- na.omit(iris)
@@ -943,7 +1007,7 @@ server <- function(input, output, session) {
   ) +
     theme_bw() +
     xlab("Proportion in Training Set") +
-    ylab("MSS error") +
+    ylab("MSE error") +
     labs(title = "The Accuracy of Every Test") +
     theme(
       text = element_text(size = 18)
@@ -956,6 +1020,7 @@ server <- function(input, output, session) {
         scale_y_continuous(limits = c(minYAxis(), maxYAxis(), expand = expansion(mult = 0.01, add = 0)), labels = scaleFUN) +
           geom_point(
           data = tracking$DT,
+          alpha = 0.33,
           mapping = aes(
             x = percentTraining,
             y = accuracyValue
@@ -1008,11 +1073,11 @@ server <- function(input, output, session) {
         text = element_text(size = 18),
       ) +
       xlab("Proportion in Training Set") +
-      ylab(yLabel()) +
-      labs(title = "The Mean Accuracy") +
+      ylab(paste('Mean of the', yLabel())) +
+      labs(title = "Mean Accuracy") +
       stat_smooth(method = "lm", formula = y ~ poly(x, 1), size = 1, se = FALSE) +
-      scale_x_continuous(limits = c(.2, 1)) + 
-      scale_y_continuous(labels = scaleFUN)
+      scale_y_continuous(limits = c(meanMinYAxis(), meanMaxYAxis(), expand = expansion(mult = 0.01, add = 0)), labels = scaleFUN) +
+      scale_x_continuous(limits = c(.2, 1))
     })
 }
 
