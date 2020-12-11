@@ -4,7 +4,7 @@
 ![year](https://img.shields.io/badge/year-2020-lightgrey)
 ![new](https://img.shields.io/badge/lifecycle-newapp-brightgreen)
 
-![App Screenshot](/docs/screenshot.png)
+![App Screenshot](https://sites.psu.edu/shinyapps/files/2020/12/Training-vs-Testing-1200x568.png)
 
 This app was created in order to teach students about how to decide on what percent of data should be dedicated to training vs percent dedicated to the validation set.
 
