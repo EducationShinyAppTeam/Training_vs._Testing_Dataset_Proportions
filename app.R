@@ -20,7 +20,7 @@ library(glmnet)
 library(lars)
 library(DT)
 
-# Packages for Future Versions
+# Packages for potential Future Versions
 # library(ellipse)
 # library(e1071)
 # library(randomForest)
@@ -36,7 +36,6 @@ scaleFUN <- function(x){ sprintf("%.1f", x) }
 
 #Input: data set, the testingPercent (average .8), method used
 #output: returns the percent accuracy of the model.
-#percent <- calculateAccuracy(dataset, input$testingPercent, input$theMethod, predictor, predictionVariable)
 #predictor replaces theDataSet$Species, predictionVariable is just 'variableString'
 calculateAccuracy <- function(theDataSet, testingPercent, method, predictor, predictionVariable){
   validation_index <- createDataPartition(
@@ -74,6 +73,8 @@ calculateAccuracy <- function(theDataSet, testingPercent, method, predictor, pre
     )
     probabilities <- predict(fit.lr, validation, type = "response")
     if (predictionVariable ==  "sex") {
+      finalPredictions <- ifelse(probabilities < 0.5, "female", "male")
+    } else if(predictionVariable == "patientSex") {
       finalPredictions <- ifelse(probabilities < 0.5, "female", "male")
     } else if (predictionVariable == "target") {
       finalPredictions <- ifelse(probabilities > 0.5, 1, 0) #1 unhealthy and 2 healthy
@@ -211,7 +212,7 @@ ui <- list(
             br(),
             br(),
             br(),
-            div(class = "updated", "Last Update: 12/08/2020 by NJH")
+            div(class = "updated", "Last Update: 12/31/2020 by EJW")
           )
         ),
         ### Prerequisites Page ----
@@ -227,7 +228,7 @@ ui <- list(
               target = "_blank",
               class = "bodylinks"
             ),
-            'for all the information needed.'
+            'by Ayush Pant for all the information needed.'
           ),
           p('MSE: Mean Square Error. This is used often for statistics and here
             is used to measure how far off a prediction is from the true value.
@@ -380,6 +381,11 @@ ui <- list(
           ),
           p(
             class = "hangingindent",
+            "Pant, A. (2019, January 23). Workflow of a Machine Learning Project. Retrieved December 31, 2020, from 
+            https://towardsdatascience.com/workflow-of-a-machine-learning-project-ec1dba419b94"
+          ),
+          p(
+            class = "hangingindent",
             "Venables, W., N., and Ripley, B., D. (2002). Modern Applied Statistics with
             S. Fourth Edition. Springer, New York. [MASS Package]"
           ),
@@ -437,7 +443,7 @@ server <- function(input, output, session) {
   #----New reactives----
   yLabel <- reactive({
     yLabel <- input$theVariable
-    if(input$theVariable == "Species" || input$theVariable == "species" || input$theVariable == "island" || input$theVariable == "sex" || input$theVariable == "target")
+    if(input$theVariable == "Species" || input$theVariable == "species" || input$theVariable == "island" || input$theVariable == "sex" || input$theVariable == "patientSex" || input$theVariable == "target")
     {
       yLabel <- "Percentage of Correct Predictions"
     }
@@ -448,7 +454,7 @@ server <- function(input, output, session) {
     yLabel
   })
 
-  # What are these for?
+  # These are used to set max Y value on plot of Accuracy of Every Test
   maxYAxis <- eventReactive(
     eventExpr = input$theVariable,
     valueExpr = {
@@ -460,6 +466,7 @@ server <- function(input, output, session) {
         "island" = 75,
         "body_mass_g" = 120000,
         "sex" = 100,
+        "patientSex" = 90,
         "youtube" = 4000,
         "sales" = 20,
         "target" = 100,
@@ -467,7 +474,8 @@ server <- function(input, output, session) {
       )
     }
   )
-
+  
+  #These are used to set min Y value on plot of Accuracy of Every Test
   minYAxis <- eventReactive(
     eventExpr = input$theVariable,
     valueExpr = {
@@ -478,7 +486,8 @@ server <- function(input, output, session) {
         "species" = 90,
         "island" = 65,
         "body_mass_g" = 0,
-        "sex" = 50,
+        "sex" = 75,
+        "patientSex" = 40,
         "youtube" = 0,
         "sales" = 0,
         "target" = 55,
@@ -486,7 +495,7 @@ server <- function(input, output, session) {
       )
     }
   )
-
+  #These are used to set max Y value on plot of the Mean Accuracy of every test
   meanMaxYAxis <- eventReactive(
     eventExpr = input$theVariable,
     valueExpr = {
@@ -498,6 +507,7 @@ server <- function(input, output, session) {
         "island" = 75,
         "body_mass_g" = 100000,
         "sex" = 100,
+        "patientSex" = 75,
         "youtube" = 2000,
         "sales" = 6,
         "target" = 85,
@@ -505,7 +515,7 @@ server <- function(input, output, session) {
       )
     }
   )
-
+  #These are used to set min Y value on plot of the Mean Accuracy of every test
   meanMinYAxis <- eventReactive(
     eventExpr = input$theVariable,
     valueExpr = {
@@ -516,7 +526,8 @@ server <- function(input, output, session) {
         "species" = 99,
         "island" = 65,
         "body_mass_g" = 75000,
-        "sex" = 64,
+        "sex" = 85,
+        "patientSex" = 60,
         "youtube" = 1400,
         "sales" = 3,
         "target" = 75,
@@ -540,11 +551,11 @@ server <- function(input, output, session) {
         info = switch(
           EXPR = input$theDataSet,
           "Iris" = "Machine learning dataset containing various measurments of
-                    different species of iris flowers",
-          "Palmer Penguins" = "Machine learning algorithm to try and learn the
-                               type of penguins",
-          "Marketing" = "Simple dataset to predict continuous values most notably
-                         the overall sales",
+                    different species of iris flowers that can be predicted",
+          "Palmer Penguins" = "Machine learning algorithm to try and predict the
+                               type of penguins or other characteristics",
+          "Marketing" = "Simple dataset to predict continuous values like overall 
+                        sales or spending on each medium",
           "Heart Disease" = "This dataset adds extra challenge with its numerous
                              continuous and categorical variables to be predicted."
         ),
@@ -575,7 +586,7 @@ server <- function(input, output, session) {
           "Heart Disease" = "<ul>
                              <li>Age: in years</li>
                              <li>cp: chest pain type</li>
-                             <li><strong>sex: male or female</strong></li>
+                             <li><strong>patientSex: male or female</strong></li>
                              <li><strong>trestbps: resting blood pressure</strong></li>
                              <li>chol: serum cholestoral in mg/dl, fasting blood sugar (yes or no)</li>
                              <li>restecg: resting electrocardiographic results</li>
@@ -640,7 +651,7 @@ server <- function(input, output, session) {
       updateSelectInput(
         session = session,
         inputId = "theVariable",
-        choices = list('sex', 'trestbps', 'target')
+        choices = list('patientSex', 'trestbps', 'target')
       )
     }
   })
@@ -659,7 +670,7 @@ server <- function(input, output, session) {
         inputId = "theMethod",
         choices = list("Linear Discriminant Analysis")
       )
-    } else if (input$theVariable %in% c("sex", "target")) {
+    } else if (input$theVariable %in% c("sex", "target", "patientSex")) {
       updateSelectInput(
         session = session,
         inputId = "theMethod",
@@ -699,9 +710,9 @@ server <- function(input, output, session) {
       dataset[dataset == "?"] <- NA
       dataset <- na.omit(dataset)
       #test
-      dataset[dataset$sex == 0,]$sex <- "female"
-      dataset[dataset$sex == 1,]$sex <- "male"
-      dataset$sex <- as.factor(dataset$sex)
+      dataset[dataset$patientSex == 0,]$patientSex <- "female"
+      dataset[dataset$patientSex == 1,]$patientSex <- "male"
+      dataset$patientSex <- as.factor(dataset$patientSex)
       dataset$fbs <- as.factor(dataset$fbs)
       dataset$exang <- as.factor(dataset$exang)
       dataset$ca <- as.integer(dataset$ca)
